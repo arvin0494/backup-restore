@@ -198,6 +198,10 @@ def do_backup(dest, auto_yes=False):
                     return
             except (EOFError, KeyboardInterrupt):
                 print(); return
+        # Remove old home data so rsync does a fresh copy (not incremental)
+        if os.path.isdir(home_dir):
+            e("  {}Removing previous backup data for fresh sync...{}", Y, N)
+            shutil.rmtree(home_dir, ignore_errors=True)
     print()
 
     # ── 1. Package lists ─────────────────────────────────────────────────
