@@ -104,7 +104,7 @@ def detect_path():
 # ─────────────────────────────────────────────
 #  BACKUP
 # ─────────────────────────────────────────────
-def do_backup(dest):
+def do_backup(dest, auto_yes=False):
     dest = os.path.abspath(os.path.expanduser(dest))
     os.makedirs(dest, exist_ok=True)
 
@@ -119,6 +119,16 @@ def do_backup(dest):
         shutil.rmtree(home_dir, ignore_errors=True)
 
     e("{}Backing up to:{} {}{}{}", C, N, W, dest, N)
+    if os.path.isfile(complete_marker):
+        e("  {}Warning: backup already exists at this location{}", Y, N)
+        if not auto_yes:
+            try:
+                ok = input("  Overwrite existing backup? [y/N] ").strip().lower()
+                if ok != "y":
+                    e("  {}Cancelled.{}", Y, N)
+                    return
+            except (EOFError, KeyboardInterrupt):
+                print(); return
     print()
 
     # ── Package lists ──
@@ -353,6 +363,14 @@ def do_restore(backup_dir, dest_dir, auto=False):
 
     print()
     e("  {}Restoring:{} {}{}{}", W, N, Y, ", ".join(chosen), N)
+    if not auto:
+        try:
+            ok = input("  Proceed? [Y/n] ").strip().lower()
+            if ok in ("n", "no"):
+                e("  {}Cancelled.{}", Y, N)
+                return
+        except (EOFError, KeyboardInterrupt):
+            print(); return
     print()
 
     for key in tqdm(chosen, desc="  Progress", unit="item", bar_format="{desc} {bar} {n_fmt}/{total_fmt} {unit}s"):
@@ -465,7 +483,7 @@ def main():
             return
         else:
             args.backup = args.dest or detect_path()
-            do_backup(args.backup)
+            do_backup(args.backup, auto_yes=args.yes)
             return
 
     if args.restore:
@@ -486,7 +504,7 @@ def main():
 
     if args.backup:
         dest = args.backup if args.backup is not None else (args.dest or detect_path())
-        do_backup(dest)
+        do_backup(dest, auto_yes=args.yes)
         return
 
 
