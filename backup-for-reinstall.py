@@ -32,8 +32,14 @@ HOME = os.path.expanduser("~")
 R = "\033[0;31m"; G = "\033[0;32m"; Y = "\033[0;33m"
 M = "\033[0;35m"; C = "\033[0;36m"; W = "\033[1;37m"; N = "\033[0m"
 
+LOG_FILE = None
+
 def e(text, *args, **kwargs):
-    print(text.format(*args, **kwargs))
+    s = text.format(*args, **kwargs)
+    print(s)
+    if LOG_FILE:
+        with open(LOG_FILE, "a") as f:
+            f.write(s + "\n")
 
 def run(cmd, **kwargs):
     kwargs.setdefault("shell", True)
@@ -62,6 +68,10 @@ def detect_path():
 def do_backup(dest):
     dest = os.path.abspath(os.path.expanduser(dest))
     os.makedirs(dest, exist_ok=True)
+
+    global LOG_FILE
+    LOG_FILE = os.path.join(dest, "backup.log")
+    e("{}Log:{} {}{}{}", C, N, Y, LOG_FILE, N)
 
     complete_marker = os.path.join(dest, ".complete")
     home_dir = os.path.join(dest, "home")
@@ -151,7 +161,7 @@ def do_backup(dest):
          "snap/",".local/share/flatpak/",".npm/",".cargo/",".rustup/",
          ".gradle/",".m2/","VirtualBox VMs/",".vagrant.d/",
          "*~","*.bak","*.swp"])
-    run(f"sudo rsync -aAX --inplace --no-links --info=progress2 --no-inc-recursive {hx} ~/ '{home_dest}/'")
+    run(f"sudo rsync -aAX --inplace --no-links --info=progress2 --no-inc-recursive {hx} ~/ '{home_dest}/' 2>&1 | grep -v 'skipping non-regular file' || true")
 
     print()
     sz_out = run(f"du -sh '{dest}' | cut -f1", capture_output=True, shell=True, text=True).stdout.strip()
