@@ -176,19 +176,11 @@ def do_backup(dest, auto_yes=False):
 
     global LOG_FILE
     LOG_FILE = os.path.join(dest, "backup.log")
-    e("{}Log:{} {}{}{}", C, N, Y, LOG_FILE, N)
-
-    # Incomplete backup detection — if "home/" exists without a ".complete" marker
-    # the previous run was interrupted, so we clean up and start fresh.
     complete_marker = os.path.join(dest, ".complete")
-    home_dir = os.path.join(dest, "home")
-    if os.path.isdir(home_dir) and not os.path.isfile(complete_marker):
-        e("  {}Removing previous incomplete backup...{}", Y, N)
-        run(f"sudo rm -rf '{home_dir}'")
+    e("{}Log:{} {}{}{}", C, N, Y, LOG_FILE, N)
 
     e("{}Backing up to:{} {}{}{}", C, N, W, dest, N)
     if os.path.isfile(complete_marker):
-        # A completed backup already lives at this location — warn the user.
         e("  {}Warning: backup already exists at this location{}", Y, N)
         if not auto_yes:
             try:
@@ -198,10 +190,6 @@ def do_backup(dest, auto_yes=False):
                     return
             except (EOFError, KeyboardInterrupt):
                 print(); return
-        # Remove old home data so rsync does a fresh copy (not incremental)
-        if os.path.isdir(home_dir):
-            e("  {}Removing previous backup data for fresh sync...{}", Y, N)
-            run(f"sudo rm -rf '{home_dir}'")
     print()
 
     # ── 1. Package lists ─────────────────────────────────────────────────
