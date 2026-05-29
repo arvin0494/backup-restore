@@ -97,7 +97,7 @@ def rsync_progress(cmd, desc="  Syncing"):
                 if total is None:
                     total = t
                     if total:
-                        pbar = tqdm(total=total, unit="file", desc=desc,
+                        pbar = tqdm(total=total, unit="file", desc=desc, ncols=80,
                                     bar_format="{desc} {bar} {n_fmt}/{total_fmt} [{elapsed}<{remaining}]")
                 if pbar and total:
                     pbar.n = total - rem
