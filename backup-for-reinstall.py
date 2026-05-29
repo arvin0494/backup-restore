@@ -293,17 +293,17 @@ def do_restore(backup_dir, dest_dir, auto=False):
         p = os.path.join(backup_dir, name)
         if os.path.isdir(p):
             add(name.lstrip("."), f"Restore ~/{name}",
-                lambda p=p: run(f"cp -a '{p}' '{dest_dir}/' 2>/dev/null"))
+                lambda p=p: run(f"rsync -a '{p}/' '{dest_dir}/{name}/' 2>/dev/null"))
 
     keyrings = os.path.join(backup_dir, "keyrings")
     if os.path.isdir(keyrings):
         add("keyrings", "Restore keyrings (~/.local/share/keyrings)",
-            lambda: run("cp -a '{}' '{}/.local/share/' 2>/dev/null".format(keyrings, dest_dir)))
+            lambda: run("rsync -a '{}/' '{}/.local/share/keyrings/' 2>/dev/null".format(keyrings, dest_dir)))
 
     vm_qemu = os.path.join(backup_dir, "virt-manager", "qemu")
     if os.path.isdir(vm_qemu):
         add("vm-configs", "Restore libvirt VM configs (/etc/libvirt/qemu)",
-            lambda: run("sudo cp -a '{}/qemu' /etc/libvirt/ 2>/dev/null".format(os.path.join(backup_dir, "virt-manager"))))
+            lambda: run("sudo rsync -a '{}/qemu/' /etc/libvirt/qemu/ 2>/dev/null".format(os.path.join(backup_dir, "virt-manager"))))
     vm_images = os.path.join(backup_dir, "virt-manager", "images")
     if os.path.isdir(vm_images):
         add("vm-images", "Restore VM disk images (/var/lib/libvirt/images)",
