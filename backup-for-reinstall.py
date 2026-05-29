@@ -259,24 +259,6 @@ def do_backup(dest, auto_yes=False):
     print()
     e("{}--- Backing up home data ---{}", M, N)
 
-    # The dirs listed here are only used for the gdu size *estimate*.
-    # The actual rsync backs up ~/ *in full* (minus the exclude patterns).
-    dirs = ["Documents","Pictures","Music","Videos","Downloads","Desktop",
-            "Projects","Templates","Public","Games",
-            ".local",".fonts",".themes",".icons"]
-
-    # gdu size estimate (fast, parallel scanner — optional dependency)
-    total = 0
-    if shutil.which("gdu"):
-        e("  {}Estimating size...{}", Y, N)
-        for d in tqdm(dirs, desc="  Scanning", unit="dir", bar_format="{desc} {bar} {n_fmt}/{total_fmt} {unit}s"):
-            p = os.path.join(HOME, d)
-            if os.path.isdir(p):
-                sz = run(f"gdu -n -s -p --no-prefix '{p}' 2>/dev/null | awk '{{print $1}}'",
-                         capture_output=True, shell=True, text=True).stdout.strip()
-                total += int(sz) if sz and sz.isdigit() else 0
-        e("  {}Estimated data size:{} {}{}{}", C, N, W, _fmt(total), N)
-
     e("  {}Source:{} ~/ (full home, excluded: .cache, node_modules, etc.)", C, N)
     e("  {}Target:{} {}/home", C, N, dest)
 
@@ -288,12 +270,32 @@ def do_backup(dest, auto_yes=False):
     # Exclude patterns for the home-directory rsync.
     # --inplace and --no-links are used to avoid ntfs-3g ENOSPC caused by
     # temporary files on the NTFS destination drive.
-    hx = " ".join(f"--exclude='{x}'" for x in
-        [".cache/",".local/share/Trash/",".thumbnails/",
-         "*__pycache__/","*.pyc","node_modules/","target/",".next/",
-         "snap/",".local/share/flatpak/",".npm/",".cargo/",".rustup/",
-         ".gradle/",".m2/","VirtualBox VMs/",".vagrant.d/",
-         "*~","*.bak","*.swp"])
+    excludes = [".cache/",".local/share/Trash/",".thumbnails/",
+                "*__pycache__/","*.pyc","node_modules/","target/",".next/",
+                "snap/",".local/share/flatpak/",".npm/",".cargo/",".rustup/",
+                ".gradle/",".m2/","VirtualBox VMs/",".vagrant.d/",
+                "*~","*.bak","*.swp"]
+    hx = " ".join(f"--exclude='{x}'" for x in excludes)
+
+    # gdu size estimate (fast, parallel scanner)
+    total = 0
+    if shutil.which("gdu"):
+        e("  {}Estimating size...{}", Y, N)
+        gdu_ignore = ",".join(
+            [".cache","node_modules","target",".next","snap",
+             ".npm",".cargo",".rustup",".gradle",".m2",
+             "VirtualBox VMs",".vagrant.d",".thumbnails",
+             "flatpak","Trash"])
+        for d in ["Documents","Pictures","Music","Videos","Downloads","Desktop",
+                  "Projects","Templates","Public","Games",
+                  ".local",".fonts",".themes",".icons"]:
+            p = os.path.join(HOME, d)
+            if os.path.isdir(p):
+                sz = run(f"gdu -n -s -p --no-prefix --ignore-dirs '{gdu_ignore}' '{p}' 2>/dev/null | awk '{{print $1}}'",
+                         capture_output=True, shell=True, text=True).stdout.strip()
+                total += int(sz) if sz and sz.isdigit() else 0
+        e("  {}Estimated data size:{} {}{}{}", C, N, W, _fmt(total), N)
+
     rsync_progress(f"sudo rsync -aAX --inplace --no-links --no-inc-recursive {hx} ~/ '{home_dest}'", desc="  Home")
 
     # ── Summary ──────────────────────────────────────────────────────────
