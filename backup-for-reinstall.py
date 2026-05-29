@@ -184,7 +184,7 @@ def do_backup(dest, auto_yes=False):
     home_dir = os.path.join(dest, "home")
     if os.path.isdir(home_dir) and not os.path.isfile(complete_marker):
         e("  {}Removing previous incomplete backup...{}", Y, N)
-        shutil.rmtree(home_dir, ignore_errors=True)
+        run(f"sudo rm -rf '{home_dir}'")
 
     e("{}Backing up to:{} {}{}{}", C, N, W, dest, N)
     if os.path.isfile(complete_marker):
@@ -201,7 +201,7 @@ def do_backup(dest, auto_yes=False):
         # Remove old home data so rsync does a fresh copy (not incremental)
         if os.path.isdir(home_dir):
             e("  {}Removing previous backup data for fresh sync...{}", Y, N)
-            shutil.rmtree(home_dir, ignore_errors=True)
+            run(f"sudo rm -rf '{home_dir}'")
     print()
 
     # ── 1. Package lists ─────────────────────────────────────────────────
