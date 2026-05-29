@@ -133,8 +133,10 @@ def do_backup(dest):
         e("  {}Backing up libvirt VM configs...{}", Y, N)
         run("sudo cp -a /etc/libvirt/qemu '{}/' 2>/dev/null".format(vm_dest))
     if os.path.isdir("/var/lib/libvirt/images"):
-        e("  {}Backing up VM disk images...{}", Y, N)
-        run("sudo rsync -a --info=progress2 --no-inc-recursive /var/lib/libvirt/images/ '{}/images/' 2>&1 | grep -v 'skipping non-regular file' || true".format(vm_dest))
+        imgsz = run("sudo du -sh /var/lib/libvirt/images | cut -f1", capture_output=True, shell=True, text=True).stdout.strip()
+        e("  {}VM disk images:{} {}{}{}", C, N, W, imgsz, N)
+        e("  {}Syncing...{}", Y, N)
+        run(f"sudo rsync -aAX --inplace --info=progress2 --no-inc-recursive /var/lib/libvirt/images/ '{vm_dest}/images/' 2>&1")
 
     # ── Home data ──
     print()
