@@ -41,7 +41,7 @@ def e(text, *args, **kwargs):
         with open(LOG_FILE, "a") as f:
             f.write(s + "\n")
 
-import re, threading
+import re, signal
 
 def run(cmd, **kwargs):
     kwargs.setdefault("shell", True)
@@ -51,7 +51,7 @@ def rsync_progress(cmd, desc="  Syncing"):
     proc = subprocess.Popen(
         f"stdbuf -oL {cmd} --info=progress2 --out-format='%n'",
         shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-        text=True, bufsize=1
+        text=True, bufsize=1, start_new_session=True
     )
     pat = re.compile(r'\(xfr#\d+,\s*to-chk=(\d+)/(\d+)\)')
     total = None; pbar = None
@@ -75,10 +75,11 @@ def rsync_progress(cmd, desc="  Syncing"):
             elif pbar:
                 pbar.set_description(f"{desc} [{line[:55]}]")
     except KeyboardInterrupt:
-        proc.terminate()
+        e("{}Interrupted, shutting down rsync...{}", Y, N)
+        proc.send_signal(signal.SIGINT)
     proc.wait()
     if pbar:
-        pbar.n = pbar.total
+        pbar.n = pbar.total if pbar.total else 0
         pbar.refresh(); pbar.close()
     return proc.returncode
 
