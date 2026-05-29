@@ -161,7 +161,7 @@ def do_backup(dest, auto_yes=False):
     """
     dest = os.path.abspath(os.path.expanduser(dest))
     base_mount = os.path.dirname(os.path.dirname(dest))
-    if base_mount not in open("/proc/mounts").read():
+    if subprocess.run(["findmnt", "-n", base_mount], capture_output=True).returncode != 0:
         print(f"  {R}Error: backup drive not mounted at {base_mount}{N}")
         print(f"  {Y}Mount the drive and try again.{N}")
         sys.exit(1)
