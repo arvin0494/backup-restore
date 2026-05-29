@@ -119,9 +119,11 @@ def do_backup(dest):
     print()
     e("{}--- Backing up home data ---{}", M, N)
     dirs = ["Documents","Pictures","Music","Videos","Downloads","Desktop",
-            "Projects","Templates","Public",
+            "Projects","Templates","Public","Games",
             ".local/share/gnome-shell",".local/share/applications",
             ".local/share/nautilus",".local/share/fonts",
+            ".local/share/Steam",".local/share/steam",
+            ".local/state",".local/bin",
             ".fonts",".themes",".icons"]
 
     # gdu size estimate
@@ -136,7 +138,7 @@ def do_backup(dest):
                 total += int(sz) if sz and sz.isdigit() else 0
         e("  {}Estimated data size:{} {}{}{}", C, N, W, _fmt(total), N)
 
-    e("  {}Source:{} ~/ ({})", C, N, ", ".join(dirs))
+    e("  {}Source:{} ~/ (full home, excluded: .cache, node_modules, etc.)", C, N)
     e("  {}Target:{} {}/home", C, N, dest)
 
     home_dest = os.path.join(dest, "home")
