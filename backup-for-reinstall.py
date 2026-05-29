@@ -83,6 +83,7 @@ def rsync_progress(cmd, desc="  Syncing"):
         text=True, bufsize=1, start_new_session=True
     )
     pat = re.compile(r'\(xfr#\d+,\s*to-chk=(\d+)/(\d+)\)')
+    speed_pat = re.compile(r'(\d+[\.,]?\d*\s*[KMG]?B/s)')
     total = None; pbar = None
 
     try:
@@ -97,10 +98,13 @@ def rsync_progress(cmd, desc="  Syncing"):
                     total = t
                     if total:
                         pbar = tqdm(total=total, unit="file", desc=desc,
-                                    bar_format="{desc} {bar} {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]")
+                                    bar_format="{desc} {bar} {n_fmt}/{total_fmt} [{elapsed}<{remaining}]")
                 if pbar and total:
                     pbar.n = total - rem
                     pbar.refresh()
+                sm = speed_pat.search(line)
+                if sm and pbar:
+                    pbar.set_description(f"{desc} [{sm.group(1)}]")
             elif pbar:
                 pbar.set_description(f"{desc} [{line[:55]}]")
     except KeyboardInterrupt:
