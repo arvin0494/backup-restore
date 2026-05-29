@@ -268,6 +268,7 @@ def do_backup(dest, auto_yes=False):
                 "*__pycache__/","*.pyc","node_modules/","target/",".next/",
                 "snap/",".local/share/flatpak/",".npm/",".cargo/",".rustup/",
                 ".gradle/",".m2/","VirtualBox VMs/",".vagrant.d/",
+                "Cache/","Code Cache/","GPUCache/","Caches/",
                 "*~","*.bak","*.swp"]
     hx = " ".join(f"--exclude='{x}'" for x in excludes)
 
@@ -279,7 +280,7 @@ def do_backup(dest, auto_yes=False):
             [".cache","node_modules","target",".next","snap",
              ".npm",".cargo",".rustup",".gradle",".m2",
              "VirtualBox VMs",".vagrant.d",".thumbnails",
-             "flatpak","Trash"])
+             "flatpak","Trash","Cache","Code Cache","GPUCache","Caches"])
         for d in ["Documents","Pictures","Music","Videos","Downloads","Desktop",
                   "Projects","Templates","Public","Games",
                   ".local",".fonts",".themes",".icons"]:
