@@ -82,8 +82,8 @@ def rsync_progress(cmd, desc="  Syncing"):
         shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
         text=True, bufsize=1, start_new_session=True
     )
-    pat = re.compile(r'\(xfr#\d+,\s*to-chk=(\d+)/(\d+)\)')
-    speed_pat = re.compile(r'(\d+[\.,]?\d*\s*[KMG]?B/s)')
+    pat = re.compile(r'\(xfr#\d+,\s*(?:ir-)?(?:to-)?chk=(\d+)/(\d+)\)')
+    speed_pat = re.compile(r'(\d+[\.,]?\d*\s*[kKMG]?B/s)')
     total = None; pbar = None
 
     try:
