@@ -72,44 +72,63 @@ def run_ok(cmd):
 def rsync_progress(cmd, desc="  Syncing"):
     """Run an rsync command and display a live tqdm progress bar.
 
-    Parses rsync's ``--info=progress2`` output (which uses ``(xfr#N, to-chk=REM/TOTAL)``)
-    to track file count progress.  Shows the current transfer speed and filename in the
-    bar description.  The rsync process is isolated from the terminal's SIGINT so we
-    can shut it down cleanly on Ctrl+C.
+    Reads raw stderr output from rsync (which uses ``\\r`` and ``\\n`` line endings)
+    so that per-file progress lines are processed immediately for smooth speed updates.
+    The rsync process is isolated from the terminal's SIGINT so we can shut it down
+    cleanly on Ctrl+C.
     """
+    import select, os
+
     proc = subprocess.Popen(
-        f"stdbuf -oL {cmd} --info=progress2",
+        f"stdbuf -oL {cmd} --info=progress2 --progress",
         shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
-        text=True, bufsize=1, start_new_session=True
+        text=False, start_new_session=True
     )
     pat = re.compile(r'\(xfr#\d+,\s*(?:ir-)?(?:to-)?chk=(\d+)/(\d+)\)')
     speed_pat = re.compile(r'(\d+[\.,]?\d*\s*[kKMG]?B/s)')
-    total = None; pbar = None; cur_speed = ""
+    total = None; pbar = None; cur_speed = ""; fd = proc.stderr.fileno(); buf = b""
 
     try:
-        for line in iter(proc.stderr.readline, ''):
-            line = line.strip()
-            if not line:
-                continue
-            m = pat.search(line)
-            if m:
-                rem = int(m.group(1)); t = int(m.group(2))
-                if total is None:
-                    total = t
-                    if total:
-                        pbar = tqdm(total=total, unit="file", desc=desc, ncols=80,
-                                    bar_format="{desc} [{elapsed}<{remaining}] [{n_fmt}/{total_fmt} files]")
-                if pbar and total:
-                    pbar.n = total - rem
-                    pbar.refresh()
-                sm = speed_pat.search(line)
-                if sm:
-                    cur_speed = sm.group(1)
-                if pbar:
-                    pbar.set_description(f"{desc} [{cur_speed}]" if cur_speed else desc)
-            elif pbar:
-                tag = f" [{cur_speed}]" if cur_speed else ""
-                pbar.set_description(f"{desc}{tag} [{line[:55]}]")
+        while True:
+            r, _, _ = select.select([fd], [], [], 0.5)
+            if r:
+                chunk = os.read(fd, 65536)
+                if not chunk:
+                    break
+                buf += chunk
+            elif proc.poll() is not None:
+                break
+            # Process all complete lines (\r or \n terminated)
+            while True:
+                cr = buf.find(b'\r')
+                nl = buf.find(b'\n')
+                if cr < 0 and nl < 0:
+                    break
+                if nl >= 0 and (cr < 0 or nl < cr):
+                    idx = nl + 1
+                else:
+                    idx = cr + 1
+                raw_line = buf[:idx].strip(b'\r\n ')
+                buf = buf[idx:]
+                if not raw_line:
+                    continue
+                line = raw_line.decode(errors='replace')
+                m = pat.search(line)
+                if m:
+                    rem = int(m.group(1)); t = int(m.group(2))
+                    if total is None:
+                        total = t
+                        if total:
+                            pbar = tqdm(total=total, unit="file", desc=desc, ncols=80,
+                                        bar_format="{desc} [{elapsed}<{remaining}] [{n_fmt}/{total_fmt} files]")
+                    if pbar and total:
+                        pbar.n = total - rem
+                        pbar.refresh()
+                    sm = speed_pat.search(line)
+                    if sm:
+                        cur_speed = sm.group(1)
+                    if pbar:
+                        pbar.set_description(f"{desc} [{cur_speed}]" if cur_speed else desc)
     except KeyboardInterrupt:
         e("{}Interrupted, shutting down rsync...{}", Y, N)
         proc.send_signal(signal.SIGINT)
