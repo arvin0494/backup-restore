@@ -8,6 +8,7 @@ from pathlib import Path
 try:
     from tqdm import tqdm
 except ImportError:
+    sys.stderr.write("  \033[0;33mWarning: tqdm not installed. Run with --setup to install.\033[0m\n")
     class tqdm:
         def __init__(self, iterable=None, desc=None, unit=None, ncols=None, bar_format=None, disable=False):
             self.iterable = iterable or []
@@ -366,6 +367,59 @@ def do_restore(backup_dir, dest_dir, auto=False):
 
 
 # ─────────────────────────────────────────────
+#  DEPENDENCIES
+# ─────────────────────────────────────────────
+def install_deps():
+    pm = None; pkgs = {}
+    if shutil.which("pacman"):
+        pm = "sudo pacman -S --noconfirm"
+        pkgs = {"rsync":"rsync","gdu":"gdu","fzf":"fzf","tqdm":"python-tqdm"}
+    elif shutil.which("apt-get"):
+        pm = "sudo apt-get install -y"
+        pkgs = {"rsync":"rsync","gdu":"gdu","fzf":"fzf","tqdm":"python3-tqdm"}
+    elif shutil.which("dnf"):
+        pm = "sudo dnf install -y"
+        pkgs = {"rsync":"rsync","gdu":"gdu","fzf":"fzf","tqdm":"python3-tqdm"}
+    elif shutil.which("zypper"):
+        pm = "sudo zypper install -y"
+        pkgs = {"rsync":"rsync","gdu":"gdu","fzf":"fzf","tqdm":"python3-tqdm"}
+    elif shutil.which("apk"):
+        pm = "sudo apk add"
+        pkgs = {"rsync":"rsync","gdu":"gdu","fzf":"fzf","tqdm":"py3-tqdm"}
+    else:
+        e("{}No known package manager found. Try: pip install tqdm{}", R, N)
+
+    need = []
+    for name, pkg in pkgs.items():
+        if name == "tqdm":
+            try:
+                __import__("tqdm"); continue
+            except ImportError:
+                pass
+        elif shutil.which(name):
+            continue
+        need.append(pkg if pm else name)
+
+    if not need:
+        e("  {}All dependencies satisfied.{}", G, N)
+        return
+    if not pm:
+        e("  {}Install manually: pip install --user {}rsync gdu fzf{}", Y, "" if sys.platform == "linux" else "", N)
+        return
+
+    e("  {}Installing:{} {}{}{}", Y, N, W, " ".join(need), N)
+    for pkg in need:
+        run(f"{pm} {pkg}")
+
+    # Verify
+    try:
+        __import__("tqdm")
+        e("  {}Dependencies installed.{}", G, N)
+    except ImportError:
+        e("  {}tqdm still missing. Try: pip install --user tqdm{}", R, N)
+
+
+# ─────────────────────────────────────────────
 #  MAIN
 # ─────────────────────────────────────────────
 def main():
@@ -377,8 +431,13 @@ def main():
                         help="Restore from backup DIR")
     parser.add_argument("dest", nargs="?", help="Backup target or restore destination")
     parser.add_argument("--yes", "-y", action="store_true", help="Skip prompts, select all")
+    parser.add_argument("--setup", "-s", action="store_true", help="Install dependencies and exit")
 
     args = parser.parse_args()
+
+    if args.setup:
+        install_deps()
+        return
 
     # Interactive menu if no flags
     if not args.backup and not args.restore:
