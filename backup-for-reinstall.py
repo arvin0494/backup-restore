@@ -160,9 +160,9 @@ def do_backup(dest, auto_yes=False):
     If *auto_yes* is ``True`` the existing-backup warning prompt is skipped.
     """
     dest = os.path.abspath(os.path.expanduser(dest))
-    base = os.path.dirname(os.path.dirname(dest))
-    if not os.path.isdir(base):
-        print(f"  {R}Error: backup drive not found at {base}{N}")
+    base_mount = os.path.dirname(os.path.dirname(dest))
+    if base_mount not in open("/proc/mounts").read():
+        print(f"  {R}Error: backup drive not mounted at {base_mount}{N}")
         print(f"  {Y}Mount the drive and try again.{N}")
         sys.exit(1)
     os.makedirs(dest, exist_ok=True)
