@@ -15,13 +15,26 @@ Backup your Linux system before reinstalling, then restore everything after.
 - **Logging** — `backup.log` written alongside every backup
 - **Restore with fzf** — checkbox-style multi-select (falls back to numbered menu)
 
+## Get the tool
+
+```bash
+git clone git@github.com:arvin0494/backup-restore.git
+cd backup-restore
+```
+
+Or download just the script:
+
+```bash
+curl -O https://raw.githubusercontent.com/arvin0494/backup-restore/main/backup-for-reinstall.py
+```
+
 ## Install
 
 ```bash
 python3 backup-for-reinstall.py --setup
 ```
 
-Auto-detects your package manager (pacman, apt, dnf, zypper, apk) and installs `rsync`, `gdu`, `fzf`, `python-tqdm`.
+Auto-detects your package manager (pacman, apt, dnf, zypper, apk) and installs `rsync`, `gdu`, `fzf`, `python-tqdm`. Run this on both the old and new system.
 
 ## Usage
 
