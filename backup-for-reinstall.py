@@ -41,9 +41,46 @@ def e(text, *args, **kwargs):
         with open(LOG_FILE, "a") as f:
             f.write(s + "\n")
 
+import re, threading
+
 def run(cmd, **kwargs):
     kwargs.setdefault("shell", True)
     return subprocess.run(cmd, **kwargs)
+
+def rsync_progress(cmd, desc="  Syncing"):
+    proc = subprocess.Popen(
+        f"stdbuf -oL {cmd} --info=progress2 --out-format='%n'",
+        shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        text=True, bufsize=1
+    )
+    pat = re.compile(r'\(xfr#\d+,\s*to-chk=(\d+)/(\d+)\)')
+    total = None; pbar = None
+
+    try:
+        for line in iter(proc.stdout.readline, ''):
+            line = line.strip()
+            if not line:
+                continue
+            m = pat.search(line)
+            if m:
+                rem = int(m.group(1)); t = int(m.group(2))
+                if total is None:
+                    total = t
+                    if total:
+                        pbar = tqdm(total=total, unit="file", desc=desc,
+                                    bar_format="{desc} {bar} {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]")
+                if pbar and total:
+                    pbar.n = total - rem
+                    pbar.refresh()
+            elif pbar:
+                pbar.set_description(f"{desc} [{line[:55]}]")
+    except KeyboardInterrupt:
+        proc.terminate()
+    proc.wait()
+    if pbar:
+        pbar.n = pbar.total
+        pbar.refresh(); pbar.close()
+    return proc.returncode
 
 def run_ok(cmd):
     return run(cmd, capture_output=True).returncode == 0
@@ -136,7 +173,7 @@ def do_backup(dest):
         imgsz = run("sudo du -sh /var/lib/libvirt/images | cut -f1", capture_output=True, shell=True, text=True).stdout.strip()
         e("  {}VM disk images:{} {}{}{}", C, N, W, imgsz, N)
         e("  {}Syncing...{}", Y, N)
-        run(f"sudo rsync -aAX --inplace --no-inc-recursive --info=progress2 /var/lib/libvirt/images/ '{vm_dest}/images/'")
+        rsync_progress(f"sudo rsync -aAX --inplace --no-inc-recursive /var/lib/libvirt/images/ '{vm_dest}/images/'", desc="  VM images")
 
     # ── Home data ──
     print()
@@ -170,7 +207,7 @@ def do_backup(dest):
          "snap/",".local/share/flatpak/",".npm/",".cargo/",".rustup/",
          ".gradle/",".m2/","VirtualBox VMs/",".vagrant.d/",
          "*~","*.bak","*.swp"])
-    run(f"sudo rsync -aAX --inplace --no-links --no-inc-recursive --info=progress2 --out-format='%n' {hx} ~/ '{home_dest}/' | grep -E '^[^/]+/$|^[^/]+/[^/]+/$' || true")
+    rsync_progress(f"sudo rsync -aAX --inplace --no-links --no-inc-recursive {hx} ~/ '{home_dest}'", desc="  Home")
 
     print()
     sz_out = run(f"du -sh '{dest}' | cut -f1", capture_output=True, shell=True, text=True).stdout.strip()
