@@ -268,8 +268,8 @@ def do_backup(dest, auto_yes=False):
     e("  {}Backing up home data (sudo rsync)...{}", Y, N)
 
     # Exclude patterns for the home-directory rsync.
-    # --inplace and --no-links are used to avoid ntfs-3g ENOSPC caused by
-    # temporary files on the NTFS destination drive.
+    # --inplace avoids ntfs-3g ENOSPC from temp files. --safe-links skips
+    # symlinks that point outside the home dir (e.g. to mounted drives).
     excludes = [".cache/",".local/share/Trash/",".thumbnails/",
                 "*__pycache__/","*.pyc","node_modules/","target/",".next/",
                 "snap/",".local/share/flatpak/",".npm/",".cargo/",".rustup/",
@@ -296,7 +296,7 @@ def do_backup(dest, auto_yes=False):
                 total += int(sz) if sz and sz.isdigit() else 0
         e("  {}Estimated data size:{} {}{}{}", C, N, W, _fmt(total), N)
 
-    rsync_progress(f"sudo rsync -aAX --inplace --no-links --no-inc-recursive {hx} ~/ '{home_dest}'", desc="  Home")
+    rsync_progress(f"sudo rsync -aAX --inplace --safe-links --no-inc-recursive {hx} ~/ '{home_dest}'", desc="  Home")
 
     # ── Summary ──────────────────────────────────────────────────────────
     print()
