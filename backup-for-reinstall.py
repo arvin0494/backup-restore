@@ -84,7 +84,7 @@ def rsync_progress(cmd, desc="  Syncing"):
     )
     pat = re.compile(r'\(xfr#\d+,\s*(?:ir-)?(?:to-)?chk=(\d+)/(\d+)\)')
     speed_pat = re.compile(r'(\d+[\.,]?\d*\s*[kKMG]?B/s)')
-    total = None; pbar = None
+    total = None; pbar = None; cur_speed = ""
 
     try:
         for line in iter(proc.stdout.readline, ''):
@@ -103,10 +103,12 @@ def rsync_progress(cmd, desc="  Syncing"):
                     pbar.n = total - rem
                     pbar.refresh()
                 sm = speed_pat.search(line)
-                if sm and pbar:
-                    pbar.set_description(f"{desc} [{sm.group(1)}]")
+                if sm:
+                    cur_speed = sm.group(1)
+                if pbar:
+                    pbar.set_description(f"{desc} [{cur_speed}]")
             elif pbar:
-                pbar.set_description(f"{desc} [{line[:55]}]")
+                pbar.set_description(f"{desc} [{cur_speed}] [{line[:55]}]")
     except KeyboardInterrupt:
         e("{}Interrupted, shutting down rsync...{}", Y, N)
         proc.send_signal(signal.SIGINT)
