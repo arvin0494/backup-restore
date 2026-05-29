@@ -290,7 +290,7 @@ def do_backup(dest, auto_yes=False):
                 total += int(sz) if sz and sz.isdigit() else 0
         e("  {}Estimated data size:{} {}{}{}", C, N, W, _fmt(total), N)
 
-    rsync_progress(f"sudo rsync -aAX --inplace --copy-links --no-inc-recursive {hx} ~/ '{home_dest}'", desc="  Home")
+    rsync_progress(f"sudo rsync -aAX --inplace --copy-links {hx} ~/ '{home_dest}'", desc="  Home")
 
     # ── Summary ──────────────────────────────────────────────────────────
     print()
