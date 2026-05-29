@@ -170,7 +170,7 @@ def do_backup(dest):
          "snap/",".local/share/flatpak/",".npm/",".cargo/",".rustup/",
          ".gradle/",".m2/","VirtualBox VMs/",".vagrant.d/",
          "*~","*.bak","*.swp"])
-    run(f"sudo rsync -aAX --inplace --no-links --no-inc-recursive --info=progress2 --out-format='%n' {hx} ~/ '{home_dest}/' | grep -E '^[^/]+/$' || true")
+    run(f"sudo rsync -aAX --inplace --no-links --no-inc-recursive --info=progress2 --out-format='%n' {hx} ~/ '{home_dest}/' | grep -E '^[^/]+/$|^[^/]+/[^/]+/$' || true")
 
     print()
     sz_out = run(f"du -sh '{dest}' | cut -f1", capture_output=True, shell=True, text=True).stdout.strip()
