@@ -12,7 +12,7 @@ from pathlib import Path
 try:
     from tqdm import tqdm
 except ImportError:
-    sys.stderr.write("  \033[0;33mWarning: tqdm not installed. Run with --setup to install.\033[0m\n")
+    sys.stderr.write("  \033[0;33mInstalling missing dependencies...\033[0m\n")
     # Minimal no-op fallback so the script still runs without tqdm
     class tqdm:
         def __init__(self, iterable=None, desc=None, unit=None, ncols=None, bar_format=None, disable=False):
@@ -511,11 +511,10 @@ def install_deps():
         need.append(pkg if pm else name)
 
     if not need:
-        e("  {}All dependencies satisfied.{}", G, N)
-        return
+        return True
     if not pm:
         e("  {}Install manually: pip install --user {}rsync gdu fzf{}", Y, "" if sys.platform == "linux" else "", N)
-        return
+        return False
 
     e("  {}Installing:{} {}{}{}", Y, N, W, " ".join(need), N)
     for pkg in need:
@@ -527,6 +526,7 @@ def install_deps():
         e("  {}Dependencies installed.{}", G, N)
     except ImportError:
         e("  {}tqdm still missing. Try: pip install --user tqdm{}", R, N)
+    return True
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -542,13 +542,10 @@ def main():
                         help="Restore from backup DIR")
     parser.add_argument("dest", nargs="?", help="Backup target or restore destination")
     parser.add_argument("--yes", "-y", action="store_true", help="Skip prompts, select all")
-    parser.add_argument("--setup", "-s", action="store_true", help="Install dependencies and exit")
 
     args = parser.parse_args()
 
-    if args.setup:
-        install_deps()
-        return
+    install_deps()
 
     # Default to backup when no arguments given
     if not args.backup and not args.restore:
