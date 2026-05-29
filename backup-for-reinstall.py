@@ -98,7 +98,7 @@ def rsync_progress(cmd, desc="  Syncing"):
                     total = t
                     if total:
                         pbar = tqdm(total=total, unit="file", desc=desc, ncols=80,
-                                    bar_format="{desc} {bar} {n_fmt}/{total_fmt} [{elapsed}<{remaining}]")
+                                    bar_format="{desc} [{elapsed}<{remaining}] [{n_fmt}/{total_fmt} files]")
                 if pbar and total:
                     pbar.n = total - rem
                     pbar.refresh()
@@ -106,9 +106,10 @@ def rsync_progress(cmd, desc="  Syncing"):
                 if sm:
                     cur_speed = sm.group(1)
                 if pbar:
-                    pbar.set_description(f"{desc} [{cur_speed}]")
+                    pbar.set_description(f"{desc} [{cur_speed}]" if cur_speed else desc)
             elif pbar:
-                pbar.set_description(f"{desc} [{cur_speed}] [{line[:55]}]")
+                tag = f" [{cur_speed}]" if cur_speed else ""
+                pbar.set_description(f"{desc}{tag} [{line[:55]}]")
     except KeyboardInterrupt:
         e("{}Interrupted, shutting down rsync...{}", Y, N)
         proc.send_signal(signal.SIGINT)
