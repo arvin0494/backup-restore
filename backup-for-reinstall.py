@@ -73,13 +73,13 @@ def rsync_progress(cmd, desc="  Syncing"):
     """Run an rsync command and display a live tqdm progress bar.
 
     Parses rsync's ``--info=progress2`` output (which uses ``(xfr#N, to-chk=REM/TOTAL)``)
-    to track file count progress.  Shows the currently-transferred file name in the
+    to track file count progress.  Shows the current transfer speed and filename in the
     bar description.  The rsync process is isolated from the terminal's SIGINT so we
     can shut it down cleanly on Ctrl+C.
     """
     proc = subprocess.Popen(
-        f"stdbuf -oL {cmd} --info=progress2 --out-format='%n'",
-        shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        f"stdbuf -oL {cmd} --info=progress2",
+        shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
         text=True, bufsize=1, start_new_session=True
     )
     pat = re.compile(r'\(xfr#\d+,\s*(?:ir-)?(?:to-)?chk=(\d+)/(\d+)\)')
@@ -87,7 +87,7 @@ def rsync_progress(cmd, desc="  Syncing"):
     total = None; pbar = None; cur_speed = ""
 
     try:
-        for line in iter(proc.stdout.readline, ''):
+        for line in iter(proc.stderr.readline, ''):
             line = line.strip()
             if not line:
                 continue
