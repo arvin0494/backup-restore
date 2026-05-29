@@ -136,7 +136,7 @@ def do_backup(dest):
         imgsz = run("sudo du -sh /var/lib/libvirt/images | cut -f1", capture_output=True, shell=True, text=True).stdout.strip()
         e("  {}VM disk images:{} {}{}{}", C, N, W, imgsz, N)
         e("  {}Syncing...{}", Y, N)
-        run(f"sudo rsync -aAX --inplace --no-inc-recursive --out-format='%n' /var/lib/libvirt/images/ '{vm_dest}/images/' 2>/dev/null")
+        run(f"sudo rsync -aAX --inplace --no-inc-recursive --info=progress2 /var/lib/libvirt/images/ '{vm_dest}/images/'")
 
     # ── Home data ──
     print()
@@ -170,7 +170,7 @@ def do_backup(dest):
          "snap/",".local/share/flatpak/",".npm/",".cargo/",".rustup/",
          ".gradle/",".m2/","VirtualBox VMs/",".vagrant.d/",
          "*~","*.bak","*.swp"])
-    run(f"sudo rsync -aAX --inplace --no-links --no-inc-recursive --out-format='%n' {hx} ~/ '{home_dest}/' 2>/dev/null | grep -E '^[^/]+/$' || true")
+    run(f"sudo rsync -aAX --inplace --no-links --no-inc-recursive --info=progress2 --out-format='%n' {hx} ~/ '{home_dest}/' | grep -E '^[^/]+/$' || true")
 
     print()
     sz_out = run(f"du -sh '{dest}' | cut -f1", capture_output=True, shell=True, text=True).stdout.strip()
