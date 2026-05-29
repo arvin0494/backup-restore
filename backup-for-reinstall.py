@@ -125,16 +125,23 @@ def do_backup(dest):
         if os.path.isdir(src):
             run(f"rsync -a {bx} '{src}/' '{b_dest}/{name}/' 2>/dev/null", stderr=subprocess.DEVNULL)
 
+    # ── VM data (virt-manager / libvirt) ──
+    e("{}--- Backing up VM data ---{}", M, N)
+    vm_dest = os.path.join(dest, "virt-manager")
+    os.makedirs(vm_dest, exist_ok=True)
+    if os.path.isdir("/etc/libvirt/qemu"):
+        e("  {}Backing up libvirt VM configs...{}", Y, N)
+        run("sudo cp -a /etc/libvirt/qemu '{}/' 2>/dev/null".format(vm_dest))
+    if os.path.isdir("/var/lib/libvirt/images"):
+        e("  {}Backing up VM disk images...{}", Y, N)
+        run("sudo rsync -a --info=progress2 --no-inc-recursive /var/lib/libvirt/images/ '{}/images/' 2>&1 | grep -v 'skipping non-regular file' || true".format(vm_dest))
+
     # ── Home data ──
     print()
     e("{}--- Backing up home data ---{}", M, N)
     dirs = ["Documents","Pictures","Music","Videos","Downloads","Desktop",
             "Projects","Templates","Public","Games",
-            ".local/share/gnome-shell",".local/share/applications",
-            ".local/share/nautilus",".local/share/fonts",
-            ".local/share/Steam",".local/share/steam",
-            ".local/state",".local/bin",
-            ".fonts",".themes",".icons"]
+            ".local",".fonts",".themes",".icons"]
 
     # gdu size estimate
     total = 0
@@ -241,6 +248,15 @@ def do_restore(backup_dir, dest_dir, auto=False):
     if os.path.isdir(keyrings):
         add("keyrings", "Restore keyrings (~/.local/share/keyrings)",
             lambda: run("cp -a '{}' '{}/.local/share/' 2>/dev/null".format(keyrings, dest_dir)))
+
+    vm_qemu = os.path.join(backup_dir, "virt-manager", "qemu")
+    if os.path.isdir(vm_qemu):
+        add("vm-configs", "Restore libvirt VM configs (/etc/libvirt/qemu)",
+            lambda: run("sudo cp -a '{}/qemu' /etc/libvirt/ 2>/dev/null".format(os.path.join(backup_dir, "virt-manager"))))
+    vm_images = os.path.join(backup_dir, "virt-manager", "images")
+    if os.path.isdir(vm_images):
+        add("vm-images", "Restore VM disk images (/var/lib/libvirt/images)",
+            lambda: run("sudo rsync -a '{}/' /var/lib/libvirt/images/ 2>/dev/null".format(vm_images)))
 
     # Home subdirs
     home_src = os.path.join(backup_dir, "home")
