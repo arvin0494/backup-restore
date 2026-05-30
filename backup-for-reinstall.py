@@ -75,12 +75,18 @@ def copy_progress(cmd, checkers=8, desc="  Syncing", ntfs=False, skip_links=Fals
     if skip_links:
         extra += " --skip-links"
     full = f"{cmd} --progress --stats 1s --checkers {checkers} --transfers {checkers}{extra}"
-    proc = subprocess.Popen(full, shell=True)
+    proc = subprocess.Popen(full, shell=True, start_new_session=True)
     try:
         proc.wait()
     except KeyboardInterrupt:
         e("  {}Interrupted.{}", Y, N)
-    proc.wait()
+        pgid = os.getpgid(proc.pid)
+        os.killpg(pgid, signal.SIGINT)
+        try:
+            proc.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            os.killpg(pgid, signal.SIGKILL)
+            proc.wait()
     return proc.returncode
 
 
@@ -304,6 +310,8 @@ def do_backup(dest, auto_yes=False):
     Path(complete_marker).touch()
     print()
     e("  {}To restore:{} python3 {} --restore {}", Y, N, sys.argv[0], dest)
+
+
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -554,14 +562,22 @@ def main():
 
     # Default to backup when no arguments given
     if not args.backup and not args.restore:
-        do_backup(args.dest or detect_path(), auto_yes=args.yes)
+        try:
+            do_backup(args.dest or detect_path(), auto_yes=args.yes)
+        except KeyboardInterrupt:
+            print()
+            e("  {}Backup cancelled.{}", R, N)
         return
 
     if args.restore:
         if args.restore is argparse.SUPPRESS or args.restore is None:
             # --restore without a value: try positional arg, or prompt
             if args.dest and os.path.isdir(args.dest):
-                do_restore(args.dest, HOME, auto=args.yes)
+                try:
+                    do_restore(args.dest, HOME, auto=args.yes)
+                except KeyboardInterrupt:
+                    print()
+                    e("  {}Restore cancelled.{}", R, N)
             else:
                 try:
                     inp = input("  Backup directory: ").strip()
@@ -570,12 +586,20 @@ def main():
                 except (EOFError, KeyboardInterrupt):
                     print()
         else:
-            do_restore(args.restore, args.dest or HOME, auto=args.yes)
+            try:
+                do_restore(args.restore, args.dest or HOME, auto=args.yes)
+            except KeyboardInterrupt:
+                print()
+                e("  {}Restore cancelled.{}", R, N)
         return
 
     if args.backup:
         dest = args.backup if args.backup is not None else (args.dest or detect_path())
-        do_backup(dest, auto_yes=args.yes)
+        try:
+            do_backup(dest, auto_yes=args.yes)
+        except KeyboardInterrupt:
+            print()
+            e("  {}Backup cancelled.{}", R, N)
         return
 
 
