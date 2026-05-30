@@ -75,14 +75,11 @@ def copy_progress(cmd, checkers=8, desc="  Syncing", ntfs=False):
     full = f"{cmd} --stats 1s --stats-one-line --stats-log-level NOTICE --checkers {checkers}{extra}"
     proc = subprocess.Popen(full, shell=True, stdout=subprocess.DEVNULL,
                             stderr=subprocess.PIPE, start_new_session=True)
-    fd = proc.stderr.fileno()
     try:
-        while True:
-            chunk = os.read(fd, 65536)
-            if not chunk:
-                break
-            sys.stderr.buffer.write(chunk)
-            sys.stderr.flush()
+        for line in iter(proc.stderr.readline, b''):
+            if b' ERROR :' not in line:
+                sys.stderr.buffer.write(line)
+                sys.stderr.flush()
     except KeyboardInterrupt:
         e("  {}Interrupted.{}", Y, N)
         proc.send_signal(signal.SIGINT)
