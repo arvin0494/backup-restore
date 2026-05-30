@@ -308,11 +308,13 @@ def do_backup(dest, auto_yes=False):
              ".npm",".cargo",".rustup",".gradle",".m2",
              "VirtualBox VMs",".vagrant.d",".thumbnails",
              "flatpak","Trash","Cache","Code Cache","GPUCache","Caches"])
-        for d in ["Documents","Pictures","Music","Videos","Downloads","Desktop",
-                  "Projects","Templates","Public","Games",
-                  ".local",".fonts",".themes",".icons"]:
+        dirs = ["Documents","Pictures","Music","Videos","Downloads","Desktop",
+                "Projects","Templates","Public","Games",
+                ".local",".fonts",".themes",".icons"]
+        for d in dirs:
             p = os.path.join(HOME, d)
             if os.path.isdir(p):
+                e("  {}  {}...{}", Y, d, N)
                 try:
                     sz = run(f"gdu -n -s -p --no-prefix --ignore-dirs '{gdu_ignore}' '{p}' 2>/dev/null | awk '{{print $1}}'",
                              capture_output=True, shell=True, text=True, timeout=30).stdout.strip()
