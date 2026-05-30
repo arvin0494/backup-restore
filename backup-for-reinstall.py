@@ -5,7 +5,7 @@ Saves package lists, configs, browser data, VM data, and home directory.
 Restore with fzf multi-select or numbered menu, with rclone progress display.
 """
 
-import os, sys, subprocess, shutil, argparse, readline, time, pty
+import os, sys, subprocess, shutil, argparse, readline, time
 from pathlib import Path
 
 # ── tqdm (progress bar library) with fallback if not installed ──────────────
@@ -70,32 +70,25 @@ def run_ok(cmd):
 
 
 def copy_progress(cmd, checkers=8, desc="  Syncing", ntfs=False):
-    """Run rclone with a pseudo-terminal so its native --progress display
-    (single updating line with file names) works through the pipe."""
+    """Run rclone, clean up its stats output to look like native progress."""
     extra = " --ignore-errors" if ntfs else ""
-    full = f"{cmd} --progress --stats 1s --checkers {checkers}{extra}"
-
-    master_fd, slave_fd = pty.openpty()
+    full = f"{cmd} --stats 1s --stats-one-line --stats-log-level NOTICE --checkers {checkers}{extra}"
     proc = subprocess.Popen(full, shell=True, stdout=subprocess.DEVNULL,
-                            stderr=slave_fd, start_new_session=True,
-                            pass_fds=(slave_fd,))
-    os.close(slave_fd)  # parent doesn't need the slave side
-
+                            stderr=subprocess.PIPE, start_new_session=True)
     try:
-        while True:
-            try:
-                data = os.read(master_fd, 65536)
-            except OSError:
-                break
-            if not data:
-                break
-            sys.stderr.buffer.write(data)
-            sys.stderr.flush()
+        for line in iter(proc.stderr.readline, b''):
+            # Strip "YYYY/MM/DD HH:MM:SS NOTICE: " prefix
+            if b'NOTICE:' in line and b"Can't follow symlink" not in line:
+                content = line.split(b'NOTICE:', 1)[1].strip()
+                if content:
+                    sys.stderr.buffer.write(content + b'\n')
+                    sys.stderr.flush()
+            elif b' ERROR :' not in line and b"Can't follow symlink" not in line:
+                sys.stderr.buffer.write(line)
+                sys.stderr.flush()
     except KeyboardInterrupt:
         e("  {}Interrupted.{}", Y, N)
         proc.send_signal(signal.SIGINT)
-
-    os.close(master_fd)
     proc.wait()
     return proc.returncode
 
