@@ -130,6 +130,8 @@ def rsync_progress(cmd, desc="  Syncing"):
                     if total is None:
                         total = t
                         if total:
+                            # Clear the scanning status line before drawing the bar
+                            sys.stderr.write("\033[2K\r")
                             pbar = tqdm(total=total, unit="file", desc=desc, ncols=80,
                                         bar_format="{desc} [{elapsed}<{remaining}] [{n_fmt}/{total_fmt} files]")
                     if pbar and total:
@@ -160,7 +162,7 @@ def rsync_progress(cmd, desc="  Syncing"):
                             f = s.rsplit('/', 1)[-1] if '/' in s else s
                             if len(f) > 80:
                                 f = "..." + f[-77:]
-                            sys.stderr.write(f"\r  {desc.strip()} {f}")
+                            sys.stderr.write(f"\r\033[K  {desc.strip()} {f}")
     except KeyboardInterrupt:
         e("{}Interrupted, shutting down rsync...{}", Y, N)
         proc.send_signal(signal.SIGINT)
