@@ -88,7 +88,7 @@ def copy_progress(cmd, checkers=8, desc="  Syncing", ntfs=False):
                 continue
             # Progress lines start with a digit (size); update in place with \r
             if msg[:1].isdigit():
-                sys.stderr.buffer.write(b'\r' + msg + b' \033[K')
+                sys.stderr.buffer.write(b'\r\033[K' + msg)
             else:
                 # Non-progress message (e.g. config notice) — print on its own line
                 sys.stderr.buffer.write(b'\n' + msg + b'\n')
