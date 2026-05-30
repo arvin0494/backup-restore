@@ -5,34 +5,20 @@ Saves package lists, configs, browser data, VM data, and home directory.
 Restore with fzf multi-select or numbered menu, with rclone progress display.
 """
 
-import os, sys, subprocess, shutil, argparse, readline, time
+import os, sys, subprocess, shutil, argparse, time
 from pathlib import Path
 
-# ── tqdm (progress bar library) with fallback if not installed ──────────────
+# ── tqdm (progress bar library) with minimal fallback ────────────────
 try:
     from tqdm import tqdm
 except ImportError:
-    sys.stderr.write("  \033[0;33mInstalling missing dependencies...\033[0m\n")
-    # Minimal no-op fallback so the script still runs without tqdm
     class tqdm:
-        def __init__(self, iterable=None, desc=None, unit=None, ncols=None, bar_format=None, disable=False):
-            self.iterable = iterable or []
-            self.disable = disable
-        def __iter__(self):
-            return iter(self.iterable)
-        def __enter__(self):
-            return self
-        def __exit__(self, *args):
-            pass
-        def update(self, n=1):
-            pass
-        def close(self):
-            pass
-        def set_description(self, desc):
-            pass
+        def __init__(self, *a, **kw): self.iterable = kw.get('iterable', a[0] if a else [])
+        def __iter__(self): return iter(self.iterable)
+        def __enter__(self): return self
+        def __exit__(self, *a): pass
         @staticmethod
-        def write(s):
-            print(s)
+        def write(s): print(s)
 
 # ── ANSI colour constants ──────────────────────────────────────────────────
 HOME = os.path.expanduser("~")
@@ -41,6 +27,9 @@ M = "\033[0;35m"; C = "\033[0;36m"; W = "\033[1;37m"; N = "\033[0m"
 
 # Global log file path — set at start of each backup
 LOG_FILE = None
+
+# Common exclude patterns shared across backup sections
+_CACHE_EXCLUDES = ["Cache","cache","Caches","Crash Reports","crashpad"]
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -69,7 +58,7 @@ def run_ok(cmd):
     return run(cmd, capture_output=True).returncode == 0
 
 
-def copy_progress(cmd, checkers=8, desc="  Syncing", ntfs=False, skip_links=False):
+def copy_progress(cmd, checkers=8, ntfs=False, skip_links=False):
     """Run rclone with its native --progress bar."""
     extra = " --ignore-errors" if ntfs else ""
     if skip_links:
@@ -202,11 +191,11 @@ def do_backup(dest, auto_yes=False):
     cfg_dest = os.path.join(dest, "config")
     os.makedirs(cfg_dest, exist_ok=True)
     excludes = " ".join(f"--exclude '{x}'" for x in
-        ["Cache","cache","Caches","Trash","trash","Session","sessions",
+        _CACHE_EXCLUDES + ["Trash","trash","Session","sessions",
          "tmp","temp","thumbnails","thumbcache","logs","Logs",
-         "Crash Reports","crashpad","node_modules","*.bak","*~"])
+         "node_modules","*.bak","*~"])
     e("  {}Syncing configs...{}", Y, N)
-    copy_progress(f"rclone copy ~/.config/ '{cfg_dest}/' {excludes}", checkers=ck, desc="  Config", ntfs=True, skip_links=True)
+    copy_progress(f"rclone copy ~/.config/ '{cfg_dest}/' {excludes}", checkers=ck, ntfs=True, skip_links=True)
     for item in [".ssh", ".gnupg", ".local/share/keyrings"]:
         src = os.path.join(HOME, item)
         if os.path.isdir(src):
@@ -224,13 +213,13 @@ def do_backup(dest, auto_yes=False):
         (".config/BraveSoftware", "BraveSoftware"),
     ]
     bx = " ".join(f"--exclude '{x}'" for x in
-        ["Cache","cache","Caches","GPUCache","Code Cache",
-         "Crash Reports","crashpad","Dictionaries","Safe Browsing"])
+        _CACHE_EXCLUDES + ["GPUCache","Code Cache",
+         "Dictionaries","Safe Browsing"])
     for src_rel, name in browsers:
         src = os.path.join(HOME, src_rel)
         if os.path.isdir(src):
             e("  {}Backing up {}...{}", Y, name, N)
-            copy_progress(f"rclone copy '{src}/' '{b_dest}/{name}/' {bx}", checkers=ck, desc=f"  {name}", ntfs=True, skip_links=True)
+            copy_progress(f"rclone copy '{src}/' '{b_dest}/{name}/' {bx}", checkers=ck, ntfs=True, skip_links=True)
 
     # ── 4. VM data (virt-manager / libvirt) ──────────────────────────────
     e("{}--- Backing up VM data ---{}", M, N)
@@ -243,11 +232,7 @@ def do_backup(dest, auto_yes=False):
         imgsz = run("sudo du -sh /var/lib/libvirt/images | cut -f1", capture_output=True, shell=True, text=True).stdout.strip()
         e("  {}VM disk images:{} {}{}{}", C, N, W, imgsz, N)
         e("  {}Syncing...{}", Y, N)
-        try:
-            copy_progress(f"sudo rclone copy /var/lib/libvirt/images/ '{vm_dest}/images/' --inplace", checkers=ck, desc="  VM images", ntfs=True)
-        except KeyboardInterrupt:
-            e("  {}Backup cancelled.{}", R, N)
-            return
+        copy_progress(f"sudo rclone copy /var/lib/libvirt/images/ '{vm_dest}/images/' --inplace", checkers=ck, ntfs=True)
 
     # ── 5. Home data ─────────────────────────────────────────────────────
     print()
@@ -293,11 +278,7 @@ def do_backup(dest, auto_yes=False):
                 total += int(sz) if sz and sz.isdigit() else 0
         e("  {}Estimated data size:{} {}{}{}", C, N, W, _fmt(total), N)
 
-    try:
-        copy_progress(f"sudo rclone copy ~/ '{home_dest}' --links --inplace {hx}", checkers=ck, desc="  Home", ntfs=True)
-    except KeyboardInterrupt:
-        e("  {}Backup cancelled.{}", R, N)
-        return
+    copy_progress(f"sudo rclone copy ~/ '{home_dest}' --links --inplace {hx}", checkers=ck, ntfs=True)
 
     # ── Summary ──────────────────────────────────────────────────────────
     print()
