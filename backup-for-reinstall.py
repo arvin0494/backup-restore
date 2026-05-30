@@ -323,6 +323,7 @@ def do_backup(dest, auto_yes=False):
                 total += int(sz) if sz and sz.isdigit() else 0
         e("  {}Estimated data size:{} {}{}{}", C, N, W, _fmt(total), N)
 
+    e("  {}Scanning files...{}", Y, N)
     try:
         rsync_progress(f"sudo rsync -aAX --inplace --copy-links {hx} ~/ '{home_dest}'", desc="  Home")
     except KeyboardInterrupt:
