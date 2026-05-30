@@ -70,53 +70,20 @@ def run_ok(cmd):
 
 
 def copy_progress(cmd, checkers=8, desc="  Syncing", ntfs=False):
-    """Run rclone (or any command), passing its --progress output through.
-    Set *ntfs* = True to add ``--ignore-errors`` (skips modtime/permission
-    failures common on NTFS drives).
-    """
-    import select, os
+    """Run rclone with its stderr connected to the real terminal so the
+    native in-place progress display works correctly."""
     extra = " --ignore-errors" if ntfs else ""
     proc = subprocess.Popen(
-        f"stdbuf -oL {cmd} --progress --stats 1s --checkers {checkers}{extra}",
-        shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+        f"{cmd} --progress --stats 1s --checkers {checkers}{extra}",
+        shell=True, stdout=subprocess.DEVNULL, stderr=None,
         start_new_session=True
     )
-    fd = proc.stderr.fileno(); buf = b""; warn = 0
     try:
-        while True:
-            r, _, _ = select.select([fd], [], [], 0.2)
-            if r:
-                chunk = os.read(fd, 65536)
-                if not chunk: break
-                buf += chunk
-            elif proc.poll() is not None:
-                break
-            while True:
-                cr = buf.find(b'\r')
-                nl = buf.find(b'\n')
-                if cr < 0 and nl < 0: break
-                if nl >= 0 and (cr < 0 or nl < cr):
-                    idx = nl + 1; raw = buf[:idx]; buf = buf[idx:]
-                else:
-                    idx = cr + 1; raw = buf[:idx]; buf = buf[idx:]
-                s = raw.strip(b'\r\n ')
-                if not s: continue
-                if s[:2].isdigit() and b':' in s[:20]:
-                    # Rclone log line (timestamp prefix) — skip silently
-                    pass
-                elif s.startswith(b'WARNING') or s.startswith(b'ERROR') or s.startswith(b'Failed'):
-                    warn += 1
-                    if warn <= 10:
-                        sys.stderr.buffer.write(raw)
-                else:
-                    sys.stderr.buffer.write(raw)
-                sys.stderr.flush()
+        proc.wait()
     except KeyboardInterrupt:
         e("  {}Interrupted, shutting down...{}", Y, N)
         proc.send_signal(signal.SIGINT)
-    proc.wait()
-    if warn > 10:
-        e("  {}... ({} more warnings suppressed){}", Y, warn - 10, N)
+        proc.wait()
     return proc.returncode
 
 
