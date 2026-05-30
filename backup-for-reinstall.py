@@ -73,12 +73,14 @@ def copy_progress(cmd, checkers=8, desc="  Syncing", ntfs=False):
     """Run rclone with its native --progress bar writing directly to the terminal."""
     extra = " --ignore-errors" if ntfs else ""
     full = f"{cmd} --progress --stats 1s --checkers {checkers}{extra}"
-    proc = subprocess.Popen(full, shell=True, stdout=subprocess.DEVNULL)  
+    proc = subprocess.Popen(full, shell=True, stdout=subprocess.DEVNULL,
+                            start_new_session=True)
     try:
         proc.wait()
     except KeyboardInterrupt:
         e("  {}Interrupted.{}", Y, N)
-    proc.wait()
+        proc.send_signal(signal.SIGINT)
+        proc.wait()
     return proc.returncode
 
 
