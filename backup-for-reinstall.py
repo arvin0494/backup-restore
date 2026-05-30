@@ -2,7 +2,7 @@
 """Backup & restore tool for Linux reinstall.
 
 Saves package lists, configs, browser data, VM data, and home directory.
-Restore with fzf multi-select or numbered menu, with progress bars via tqdm.
+Restore with fzf multi-select or numbered menu, with rclone progress display.
 """
 
 import os, sys, subprocess, shutil, argparse, readline, time
@@ -69,11 +69,11 @@ def run_ok(cmd):
     return run(cmd, capture_output=True).returncode == 0
 
 
-def rsync_progress(cmd, desc="  Syncing"):
-    """Run rsync, showing native progress while limiting warnings."""
+def copy_progress(cmd, desc="  Syncing"):
+    """Run rclone (or any command), passing its --progress output through."""
     import select, os
     proc = subprocess.Popen(
-        f"stdbuf -oL {cmd} --info=progress2 --progress",
+        f"stdbuf -oL {cmd} --progress",
         shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
         start_new_session=True
     )
@@ -97,7 +97,7 @@ def rsync_progress(cmd, desc="  Syncing"):
                     idx = cr + 1; raw = buf[:idx]; buf = buf[idx:]
                 s = raw.strip(b'\r\n ')
                 if not s: continue
-                if s.startswith(b'rsync:'):
+                if s.startswith(b'WARNING') or s.startswith(b'ERROR') or s.startswith(b'Failed'):
                     warn += 1
                     if warn <= 10:
                         sys.stderr.buffer.write(raw)
@@ -105,7 +105,7 @@ def rsync_progress(cmd, desc="  Syncing"):
                     sys.stderr.buffer.write(raw)
                 sys.stderr.flush()
     except KeyboardInterrupt:
-        e("  {}Interrupted, shutting down rsync...{}", Y, N)
+        e("  {}Interrupted, shutting down...{}", Y, N)
         proc.send_signal(signal.SIGINT)
     proc.wait()
     if warn > 10:
@@ -155,7 +155,7 @@ def do_backup(dest, auto_yes=False):
     2. Copy ``~/.config`` (with cache/trash excludes) plus ``.ssh``, ``.gnupg``, keyrings.
     3. Copy browser profiles (Firefox, Chromium, Chrome, Brave — cache excluded).
     4. Copy libvirt VM configs and disk images (sudo).
-    5. Copy the full home directory via ``sudo rsync`` with a live progress bar.
+    5. Copy the full home directory via ``sudo rclone`` with a live progress bar.
 
     If *auto_yes* is ``True`` the existing-backup warning prompt is skipped.
     """
@@ -198,12 +198,12 @@ def do_backup(dest, auto_yes=False):
     e("  {}Target:{} {}/config", C, N, dest)
     cfg_dest = os.path.join(dest, "config")
     os.makedirs(cfg_dest, exist_ok=True)
-    excludes = " ".join(f"--exclude='{x}'" for x in
+    excludes = " ".join(f"--exclude '{x}'" for x in
         ["Cache","cache","Caches","Trash","trash","Session","sessions",
          "tmp","temp","thumbnails","thumbcache","logs","Logs",
          "Crash Reports","crashpad","*.bak","*~"])
     e("  {}Syncing configs...{}", Y, N)
-    run(f"rsync -a {excludes} ~/.config/ '{cfg_dest}/' 2>/dev/null", stderr=subprocess.DEVNULL)
+    run(f"rclone copy ~/.config/ '{cfg_dest}/' {excludes} 2>/dev/null", stderr=subprocess.DEVNULL)
     for item in [".ssh", ".gnupg", ".local/share/keyrings"]:
         src = os.path.join(HOME, item)
         if os.path.isdir(src):
@@ -220,13 +220,13 @@ def do_backup(dest, auto_yes=False):
         (".config/google-chrome", "google-chrome"),
         (".config/BraveSoftware", "BraveSoftware"),
     ]
-    bx = " ".join(f"--exclude='{x}'" for x in
+    bx = " ".join(f"--exclude '{x}'" for x in
         ["Cache","cache","Caches","GPUCache","Code Cache",
          "Crash Reports","crashpad","Dictionaries","Safe Browsing"])
     for src_rel, name in tqdm(browsers, desc="  Browsers", unit="browser", bar_format="{desc} {bar} {n_fmt}/{total_fmt} {unit}s"):
         src = os.path.join(HOME, src_rel)
         if os.path.isdir(src):
-            run(f"rsync -a {bx} '{src}/' '{b_dest}/{name}/' 2>/dev/null", stderr=subprocess.DEVNULL)
+            run(f"rclone copy '{src}/' '{b_dest}/{name}/' {bx} 2>/dev/null", stderr=subprocess.DEVNULL)
 
     # ── 4. VM data (virt-manager / libvirt) ──────────────────────────────
     e("{}--- Backing up VM data ---{}", M, N)
@@ -240,7 +240,7 @@ def do_backup(dest, auto_yes=False):
         e("  {}VM disk images:{} {}{}{}", C, N, W, imgsz, N)
         e("  {}Syncing...{}", Y, N)
         try:
-            rsync_progress(f"sudo rsync -aAX --inplace --no-inc-recursive /var/lib/libvirt/images/ '{vm_dest}/images/'", desc="  VM images")
+            copy_progress(f"sudo rclone copy /var/lib/libvirt/images/ '{vm_dest}/images/' --inplace", desc="  VM images")
         except KeyboardInterrupt:
             e("  {}Backup cancelled.{}", R, N)
             return
@@ -255,19 +255,15 @@ def do_backup(dest, auto_yes=False):
     home_dest = os.path.join(dest, "home")
     os.makedirs(home_dest, exist_ok=True)
     print()
-    e("  {}Backing up home data (sudo rsync)...{}", Y, N)
+    e("  {}Backing up home data (rclone)...{}", Y, N)
 
-    # Exclude patterns for the home-directory rsync.
-    # --inplace avoids ntfs-3g ENOSPC. --copy-links dereferences all symlinks
-    # (follows them), ensuring the actual data is backed up regardless of
-    # whether targets are inside or outside the home dir.
     excludes = [".cache/",".local/share/Trash/",".thumbnails/",
                 "*__pycache__/","*.pyc","node_modules/","target/",".next/",
                 "snap/",".local/share/flatpak/",".npm/",".cargo/",".rustup/",
                 ".gradle/",".m2/","VirtualBox VMs/",".vagrant.d/",
                 "Cache/","Code Cache/","GPUCache/","Caches/",
                 "*~","*.bak","*.swp"]
-    hx = " ".join(f"--exclude='{x}'" for x in excludes)
+    hx = " ".join(f"--exclude '{x}'" for x in excludes)
 
     # gdu size estimate (fast, parallel scanner)
     total = 0
@@ -294,7 +290,7 @@ def do_backup(dest, auto_yes=False):
         e("  {}Estimated data size:{} {}{}{}", C, N, W, _fmt(total), N)
 
     try:
-        rsync_progress(f"sudo rsync -aAX --inplace --copy-links {hx} ~/ '{home_dest}'", desc="  Home")
+        copy_progress(f"sudo rclone copy ~/ '{home_dest}' --links --inplace {hx}", desc="  Home")
     except KeyboardInterrupt:
         e("  {}Backup cancelled.{}", R, N)
         return
@@ -364,7 +360,7 @@ def do_restore(backup_dir, dest_dir, auto=False):
     # Config (restore ~/.config)
     if os.path.isdir(os.path.join(backup_dir, "config")):
         add("config", "Restore ~/.config",
-            lambda: run("rsync -a '{}/config/' '{}/.config/'".format(backup_dir, dest_dir),
+            lambda: run("rclone copy '{}/config/' '{}/.config/'".format(backup_dir, dest_dir),
                         stderr=subprocess.DEVNULL))
 
     # Browser profiles
@@ -374,30 +370,30 @@ def do_restore(backup_dir, dest_dir, auto=False):
         p = os.path.join(backup_dir, "browser", name)
         if os.path.isdir(p):
             add(f"browser-{name}", f"Restore {name}",
-                lambda p=p, rd=rel_dest: run(f"rsync -a '{p}/' '{dest_dir}/{rd}/' 2>/dev/null", stderr=subprocess.DEVNULL))
+                lambda p=p, rd=rel_dest: run(f"rclone copy '{p}/' '{dest_dir}/{rd}/' 2>/dev/null", stderr=subprocess.DEVNULL))
 
     # SSH keys & GPG keys
     for name in (".ssh", ".gnupg"):
         p = os.path.join(backup_dir, name)
         if os.path.isdir(p):
             add(name.lstrip("."), f"Restore ~/{name}",
-                lambda p=p: run(f"rsync -a '{p}/' '{dest_dir}/{name}/' 2>/dev/null"))
+                lambda p=p: run(f"rclone copy '{p}/' '{dest_dir}/{name}/' 2>/dev/null"))
 
     # Login keyrings
     keyrings = os.path.join(backup_dir, "keyrings")
     if os.path.isdir(keyrings):
         add("keyrings", "Restore keyrings (~/.local/share/keyrings)",
-            lambda: run("rsync -a '{}/' '{}/.local/share/keyrings/' 2>/dev/null".format(keyrings, dest_dir)))
+            lambda: run("rclone copy '{}/' '{}/.local/share/keyrings/' 2>/dev/null".format(keyrings, dest_dir)))
 
     # VM configs & disk images (system paths, need sudo)
     vm_qemu = os.path.join(backup_dir, "virt-manager", "qemu")
     if os.path.isdir(vm_qemu):
         add("vm-configs", "Restore libvirt VM configs (/etc/libvirt/qemu)",
-            lambda: run("sudo rsync -a '{}/qemu/' /etc/libvirt/qemu/ 2>/dev/null".format(os.path.join(backup_dir, "virt-manager"))))
+            lambda: run("sudo rclone copy '{}/qemu/' /etc/libvirt/qemu/ 2>/dev/null".format(os.path.join(backup_dir, "virt-manager"))))
     vm_images = os.path.join(backup_dir, "virt-manager", "images")
     if os.path.isdir(vm_images):
         add("vm-images", "Restore VM disk images (/var/lib/libvirt/images)",
-            lambda: run("sudo rsync -a '{}/' /var/lib/libvirt/images/ 2>/dev/null".format(vm_images)))
+            lambda: run("sudo rclone copy '{}/' /var/lib/libvirt/images/ 2>/dev/null".format(vm_images)))
 
     # Per-subdirectory home data
     home_src = os.path.join(backup_dir, "home")
@@ -406,7 +402,7 @@ def do_restore(backup_dir, dest_dir, auto=False):
             sp = os.path.join(home_src, sub)
             if os.path.isdir(sp):
                 add(f"home-{sub}", f"Restore ~/{sub}",
-                    lambda sub=sub: run("rsync -a '{}/home/{}/' '{}/{}/' 2>/dev/null".format(backup_dir, sub, dest_dir, sub)))
+                    lambda sub=sub: run("rclone copy '{}/home/{}/' '{}/{}/' 2>/dev/null".format(backup_dir, sub, dest_dir, sub)))
 
     if not items:
         e("{}Nothing found to restore in that directory{}", R, N)
@@ -486,25 +482,25 @@ def install_deps():
     """Auto-detect the system package manager and install required packages.
 
     Supports pacman (Arch), apt (Debian/Ubuntu), dnf (Fedora), zypper (openSUSE),
-    and apk (Alpine).  Installs ``rsync``, ``gdu``, ``fzf``, and the Python
+    and apk (Alpine).  Installs ``rclone``, ``gdu``, ``fzf``, and the Python
     ``tqdm`` package.
     """
     pm = None; pkgs = {}
     if shutil.which("pacman"):
         pm = "sudo pacman -S --noconfirm"
-        pkgs = {"rsync":"rsync","gdu":"gdu","fzf":"fzf","tqdm":"python-tqdm"}
+        pkgs = {"rclone":"rclone","gdu":"gdu","fzf":"fzf","tqdm":"python-tqdm"}
     elif shutil.which("apt-get"):
         pm = "sudo apt-get install -y"
-        pkgs = {"rsync":"rsync","gdu":"gdu","fzf":"fzf","tqdm":"python3-tqdm"}
+        pkgs = {"rclone":"rclone","gdu":"gdu","fzf":"fzf","tqdm":"python3-tqdm"}
     elif shutil.which("dnf"):
         pm = "sudo dnf install -y"
-        pkgs = {"rsync":"rsync","gdu":"gdu","fzf":"fzf","tqdm":"python3-tqdm"}
+        pkgs = {"rclone":"rclone","gdu":"gdu","fzf":"fzf","tqdm":"python3-tqdm"}
     elif shutil.which("zypper"):
         pm = "sudo zypper install -y"
-        pkgs = {"rsync":"rsync","gdu":"gdu","fzf":"fzf","tqdm":"python3-tqdm"}
+        pkgs = {"rclone":"rclone","gdu":"gdu","fzf":"fzf","tqdm":"python3-tqdm"}
     elif shutil.which("apk"):
         pm = "sudo apk add"
-        pkgs = {"rsync":"rsync","gdu":"gdu","fzf":"fzf","tqdm":"py3-tqdm"}
+        pkgs = {"rclone":"rclone","gdu":"gdu","fzf":"fzf","tqdm":"py3-tqdm"}
     else:
         e("{}No known package manager found. Try: pip install tqdm{}", R, N)
 
@@ -522,7 +518,7 @@ def install_deps():
     if not need:
         return True
     if not pm:
-        e("  {}Install manually: pip install --user {}rsync gdu fzf{}", Y, "" if sys.platform == "linux" else "", N)
+        e("  {}Install manually: pip install --user {}rclone gdu fzf{}", Y, "" if sys.platform == "linux" else "", N)
         return False
 
     e("  {}Installing:{} {}{}{}", Y, N, W, " ".join(need), N)
