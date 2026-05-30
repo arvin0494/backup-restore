@@ -133,7 +133,7 @@ def rsync_progress(cmd, desc="  Syncing"):
                             # Clear the scanning status line before drawing the bar
                             sys.stderr.write("\033[2K\r")
                             pbar = tqdm(total=total, unit="file", desc=desc, ncols=80,
-                                        bar_format="{desc} [{elapsed}<{remaining}] [{n_fmt}/{total_fmt} files]")
+                                        bar_format="{desc} {bar} {n_fmt}/{total_fmt} [{elapsed}<{remaining}]")
                     if pbar and total:
                         pbar.n = total - rem
                         pbar.refresh()
