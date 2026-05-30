@@ -121,7 +121,7 @@ def detect_path():
 
 def detect_checkers(path):
     """Return optimal rclone ``--checkers`` count for the drive holding *path*.
-    HDD → 1 (sequential, minimal seeking), SSD → 8, NVMe → 16.
+    HDD → 3 (light parallelism), SSD → 8, NVMe → 16.
     """
     try:
         out = subprocess.run(
@@ -136,7 +136,7 @@ def detect_checkers(path):
         if os.path.isfile(rot):
             with open(rot) as f:
                 if f.read().strip() == "1":
-                    return 1
+                    return 3
         return 16 if dev.startswith("nvme") else 8
     except Exception:
         return 8
