@@ -5,13 +5,15 @@ Backup your Linux system before reinstalling, then restore everything after.
 ## Features
 
 - **Package lists** — pacman official, AUR (yay), flatpak, snap
-- **Configs** — `~/.config` (per-directory rsync with excludes for caches/trash)
-- **Browser data** — Firefox, Chromium, Chrome, Brave (profiles, excludes caches)
-- **SSH keys, GPG keys, keyrings** — `~/.ssh`, `~/.gnupg`, `~/.local/share/keyrings`
-- **Home data** — full `~/` via `sudo rsync` (excludes `.cache`, `node_modules`, etc.)
+- **Configs** — `~/.config`, `~/.ssh`, `~/.gnupg`, keyrings (caches/trash excluded)
+- **Browser data** — Firefox, Chromium, Chrome, Brave (profiles, caches excluded)
+- **Home data** — full `~/` via `sudo rclone` (excludes `.cache`, `node_modules`, etc.)
+- **Size estimation** — `gdu` scans home subdirs in parallel with package lists
 - **Virt-manager** — libvirt VM configs (`/etc/libvirt/qemu`) and disk images (`/var/lib/libvirt/images`)
-- **Auto-detect path** — `/mnt/HDD4T/{hostname}[-{os_id}]-{YYYYMM}`
-- **Progress bars** — tqdm with live file name, ETA, speed, file count
+- **Auto-detect path** — `/mnt/HDD4T/BACKUP/{hostname}[-{os_id}]`
+- **Live progress** — rclone `--progress` with file names, speed, ETA
+- **Drive-aware** — `--checkers` / `--transfers` tuned to HDD (3), SSD (8), or NVMe (16)
+- **Robust cancellation** — Ctrl+C kills the entire rclone process group, not just Python
 - **Logging** — `backup.log` written alongside every backup
 - **Restore with fzf** — checkbox-style multi-select (falls back to numbered menu)
 
@@ -28,13 +30,14 @@ Or download just the script:
 curl -O https://raw.githubusercontent.com/arvin0494/backup-restore/main/backup-for-reinstall.py
 ```
 
-## Install
+## Dependencies
 
-```bash
-python3 backup-for-reinstall.py --setup
-```
+Auto-installed on first run — supports `pacman`, `apt`, `dnf`, `zypper`, `apk`:
 
-Auto-detects your package manager (pacman, apt, dnf, zypper, apk) and installs `rsync`, `gdu`, `fzf`, `python-tqdm`. Run this on both the old and new system.
+- `rclone` — fast cloud/本地 sync with progress display
+- `gdu` — parallel disk usage estimation
+- `fzf` — fuzzy multi-select for restore
+- `python-tqdm` — restore progress bar
 
 ## Usage
 
@@ -71,7 +74,8 @@ python3 backup-for-reinstall.py
 
 ## Notes
 
-- `sudo` is required for home data rsync (permissions, broken symlinks)
-- NTFS destination (`/mnt/HDD4T`): uses `--inplace --no-links` to avoid ENOSPC from ntfs-3g temp files. If ENOSPC occurs, run `sudo ntfsfix /dev/sda1`
-- The `dirs` list in the gdu estimation step is only for size estimation — the actual rsync copies your entire `~/` (excluding listed patterns)
+- `sudo` is required for home backup (permissions, symlinks) and VM data
+- NTFS destination: uses `--inplace` to avoid ENOSPC from ntfs-3g temp files; if ENOSPC occurs, run `sudo ntfsfix /dev/sda1`
+- `.steam` and `.var` are intentionally kept in home backup (user data, not cache)
+- gdu estimation scans home directories (Documents, Pictures, Projects, etc.) ignoring `.cache`, `node_modules`, etc.
 - Incomplete backups (missing `.complete` marker) are auto-cleaned on next run
