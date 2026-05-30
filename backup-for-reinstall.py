@@ -70,25 +70,34 @@ def run_ok(cmd):
 
 
 def copy_progress(cmd, checkers=8, desc="  Syncing", ntfs=False):
-    """Run rclone, clean up its stats output to look like native progress."""
+    """Run rclone and show progress as a single updating line (like --progress)."""
     extra = " --ignore-errors" if ntfs else ""
     full = f"{cmd} --stats 1s --stats-one-line --stats-log-level NOTICE --checkers {checkers}{extra}"
     proc = subprocess.Popen(full, shell=True, stdout=subprocess.DEVNULL,
                             stderr=subprocess.PIPE, start_new_session=True)
     try:
         for line in iter(proc.stderr.readline, b''):
-            # Strip "YYYY/MM/DD HH:MM:SS NOTICE: " prefix
-            if b'NOTICE:' in line and b"Can't follow symlink" not in line:
-                content = line.split(b'NOTICE:', 1)[1].strip()
-                if content:
-                    sys.stderr.buffer.write(content + b'\n')
-                    sys.stderr.flush()
-            elif b' ERROR :' not in line and b"Can't follow symlink" not in line:
-                sys.stderr.buffer.write(line)
-                sys.stderr.flush()
+            s = line.strip()
+            if not s: continue
+            # Strip timestamp prefix (YYYY/MM/DD HH:MM:SS LEVEL:)
+            if b'NOTICE:' in s:
+                msg = s.split(b'NOTICE:', 1)[1].strip()
+            else:
+                msg = s
+            if not msg or b"Can't follow symlink" in msg:
+                continue
+            # Progress lines start with a digit (size); update in place with \r
+            if msg[:1].isdigit():
+                sys.stderr.buffer.write(b'\r' + msg + b' \033[K')
+            else:
+                # Non-progress message (e.g. config notice) — print on its own line
+                sys.stderr.buffer.write(b'\n' + msg + b'\n')
+            sys.stderr.flush()
     except KeyboardInterrupt:
+        sys.stderr.write('\n')
         e("  {}Interrupted.{}", Y, N)
         proc.send_signal(signal.SIGINT)
+    sys.stderr.write('\n')   # leave the final progress line visible
     proc.wait()
     return proc.returncode
 
