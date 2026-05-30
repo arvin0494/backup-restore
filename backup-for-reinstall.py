@@ -70,34 +70,14 @@ def run_ok(cmd):
 
 
 def copy_progress(cmd, checkers=8, desc="  Syncing", ntfs=False):
-    """Run rclone and show progress as a single updating line (like --progress)."""
+    """Run rclone with its native --progress bar writing directly to the terminal."""
     extra = " --ignore-errors" if ntfs else ""
-    full = f"{cmd} --stats 1s --stats-one-line --stats-log-level NOTICE --checkers {checkers}{extra}"
-    proc = subprocess.Popen(full, shell=True, stdout=subprocess.DEVNULL,
-                            stderr=subprocess.PIPE, start_new_session=True)
+    full = f"{cmd} --progress --stats 1s --checkers {checkers}{extra}"
+    proc = subprocess.Popen(full, shell=True, stdout=subprocess.DEVNULL)  
     try:
-        for line in iter(proc.stderr.readline, b''):
-            s = line.strip()
-            if not s: continue
-            # Strip timestamp prefix (YYYY/MM/DD HH:MM:SS LEVEL:)
-            if b'NOTICE:' in s:
-                msg = s.split(b'NOTICE:', 1)[1].strip()
-            else:
-                msg = s
-            if not msg or b"Can't follow symlink" in msg:
-                continue
-            # Progress lines start with a digit (size); update in place with \r
-            if msg[:1].isdigit():
-                sys.stderr.buffer.write(b'\r\033[K' + msg)
-            else:
-                # Non-progress message (e.g. config notice) — print on its own line
-                sys.stderr.buffer.write(b'\n' + msg + b'\n')
-            sys.stderr.flush()
+        proc.wait()
     except KeyboardInterrupt:
-        sys.stderr.write('\n')
         e("  {}Interrupted.{}", Y, N)
-        proc.send_signal(signal.SIGINT)
-    sys.stderr.write('\n')   # leave the final progress line visible
     proc.wait()
     return proc.returncode
 
