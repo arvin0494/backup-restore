@@ -5,7 +5,7 @@ Saves package lists, configs, browser data, VM data, and home directory.
 Restore with fzf multi-select or numbered menu, with progress bars via tqdm.
 """
 
-import os, sys, subprocess, shutil, argparse, readline
+import os, sys, subprocess, shutil, argparse, readline, time
 from pathlib import Path
 
 # ── tqdm (progress bar library) with fallback if not installed ──────────────
@@ -74,8 +74,8 @@ def rsync_progress(cmd, desc="  Syncing"):
 
     Reads raw stderr output from rsync (which uses ``\\r`` and ``\\n`` line endings)
     so that per-file progress lines are processed immediately for smooth speed updates.
-    The rsync process is isolated from the terminal's SIGINT so we can shut it down
-    cleanly on Ctrl+C.
+    Before the progress bar starts, shows the current file being scanned/transferred
+    so the user can see something is happening.
     """
     import select, os
 
@@ -86,7 +86,18 @@ def rsync_progress(cmd, desc="  Syncing"):
     )
     pat = re.compile(r'\(xfr#\d+,\s*(?:ir-)?(?:to-)?chk=(\d+)/(\d+)\)')
     speed_pat = re.compile(r'(\d+[\.,]?\d*\s*[kKMG]?B/s)')
-    total = None; pbar = None; cur_speed = ""; fd = proc.stderr.fileno(); buf = b""
+    total = None; pbar = None; cur_speed = ""; cur_file = ""
+    last_show = 0; fd = proc.stderr.fileno(); buf = b""
+
+    def show_cur():
+        p = cur_file.strip()
+        if p:
+            # Truncate long paths, show basename
+            name = p.rsplit('/', 1)[-1] if '/' in p else p
+            if len(name) > 60:
+                name = "..." + name[-57:]
+            return name
+        return ""
 
     try:
         while True:
@@ -128,7 +139,28 @@ def rsync_progress(cmd, desc="  Syncing"):
                     if sm:
                         cur_speed = sm.group(1)
                     if pbar:
-                        pbar.set_description(f"{desc} [{cur_speed}]" if cur_speed else desc)
+                        bar = desc
+                        if cur_speed:
+                            bar += f" [{cur_speed}]"
+                        f = show_cur()
+                        if f:
+                            bar += f" {f}"
+                        pbar.set_description(bar)
+                else:
+                    # Not a progress summary line — could be a file path
+                    s = line.strip()
+                    # Skip lines that look like per-file progress (start with spaces/numbers)
+                    if s and not s[0] in (' ', '\t', '(') and not s.startswith('sending'):
+                        cur_file = s
+                    # Before the bar exists, show current file live
+                    if pbar is None and s:
+                        t = time.monotonic()
+                        if t - last_show >= 0.1:
+                            last_show = t
+                            f = s.rsplit('/', 1)[-1] if '/' in s else s
+                            if len(f) > 80:
+                                f = "..." + f[-77:]
+                            sys.stderr.write(f"\r  {desc.strip()} {f}")
     except KeyboardInterrupt:
         e("{}Interrupted, shutting down rsync...{}", Y, N)
         proc.send_signal(signal.SIGINT)
@@ -323,7 +355,6 @@ def do_backup(dest, auto_yes=False):
                 total += int(sz) if sz and sz.isdigit() else 0
         e("  {}Estimated data size:{} {}{}{}", C, N, W, _fmt(total), N)
 
-    e("  {}Scanning files...{}", Y, N)
     try:
         rsync_progress(f"sudo rsync -aAX --inplace --copy-links {hx} ~/ '{home_dest}'", desc="  Home")
     except KeyboardInterrupt:
