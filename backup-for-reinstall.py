@@ -132,6 +132,10 @@ def rsync_progress(cmd, desc="  Syncing"):
     except KeyboardInterrupt:
         e("{}Interrupted, shutting down rsync...{}", Y, N)
         proc.send_signal(signal.SIGINT)
+        proc.wait()
+        if pbar:
+            pbar.close()
+        raise
     proc.wait()
     if pbar:
         pbar.n = pbar.total if pbar.total else 0
@@ -265,7 +269,11 @@ def do_backup(dest, auto_yes=False):
         imgsz = run("sudo du -sh /var/lib/libvirt/images | cut -f1", capture_output=True, shell=True, text=True).stdout.strip()
         e("  {}VM disk images:{} {}{}{}", C, N, W, imgsz, N)
         e("  {}Syncing...{}", Y, N)
-        rsync_progress(f"sudo rsync -aAX --inplace --no-inc-recursive /var/lib/libvirt/images/ '{vm_dest}/images/'", desc="  VM images")
+        try:
+            rsync_progress(f"sudo rsync -aAX --inplace --no-inc-recursive /var/lib/libvirt/images/ '{vm_dest}/images/'", desc="  VM images")
+        except KeyboardInterrupt:
+            e("  {}Backup cancelled.{}", R, N)
+            return
 
     # ── 5. Home data ─────────────────────────────────────────────────────
     print()
@@ -305,12 +313,19 @@ def do_backup(dest, auto_yes=False):
                   ".local",".fonts",".themes",".icons"]:
             p = os.path.join(HOME, d)
             if os.path.isdir(p):
-                sz = run(f"gdu -n -s -p --no-prefix --ignore-dirs '{gdu_ignore}' '{p}' 2>/dev/null | awk '{{print $1}}'",
-                         capture_output=True, shell=True, text=True).stdout.strip()
+                try:
+                    sz = run(f"gdu -n -s -p --no-prefix --ignore-dirs '{gdu_ignore}' '{p}' 2>/dev/null | awk '{{print $1}}'",
+                             capture_output=True, shell=True, text=True, timeout=30).stdout.strip()
+                except subprocess.TimeoutExpired:
+                    sz = ""
                 total += int(sz) if sz and sz.isdigit() else 0
         e("  {}Estimated data size:{} {}{}{}", C, N, W, _fmt(total), N)
 
-    rsync_progress(f"sudo rsync -aAX --inplace --copy-links {hx} ~/ '{home_dest}'", desc="  Home")
+    try:
+        rsync_progress(f"sudo rsync -aAX --inplace --copy-links {hx} ~/ '{home_dest}'", desc="  Home")
+    except KeyboardInterrupt:
+        e("  {}Backup cancelled.{}", R, N)
+        return
 
     # ── Summary ──────────────────────────────────────────────────────────
     print()
