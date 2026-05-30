@@ -73,7 +73,7 @@ def copy_progress(cmd, checkers=8, desc="  Syncing"):
     """Run rclone (or any command), passing its --progress output through."""
     import select, os
     proc = subprocess.Popen(
-        f"stdbuf -oL {cmd} --progress --checkers {checkers}",
+        f"stdbuf -oL {cmd} --progress --stats 1s --checkers {checkers}",
         shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
         start_new_session=True
     )
