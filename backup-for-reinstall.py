@@ -70,20 +70,17 @@ def run_ok(cmd):
 
 
 def copy_progress(cmd, checkers=8, desc="  Syncing", ntfs=False):
-    """Run rclone with progress output forwarded to stderr."""
+    """Run rclone with stderr writing directly to the terminal so the
+    native in-place progress display works correctly."""
     extra = " --ignore-errors" if ntfs else ""
     full = f"{cmd} --progress --stats 1s --checkers {checkers}{extra}"
-    proc = subprocess.Popen(full, shell=True, stdout=subprocess.DEVNULL,
-                            stderr=subprocess.PIPE, start_new_session=True)
+    proc = subprocess.Popen(full, shell=True, stdout=subprocess.DEVNULL)
     try:
-        for line in iter(proc.stderr.readline, b''):
-            sys.stderr.buffer.write(line)
-            sys.stderr.flush()
+        proc.wait()
     except KeyboardInterrupt:
         e("  {}Interrupted.{}", Y, N)
-        proc.send_signal(signal.SIGINT)
-    proc.wait()
-    return proc.returncode
+        proc.terminate()
+    return proc.wait()
 
 
 def _fmt(size):
@@ -202,7 +199,7 @@ def do_backup(dest, auto_yes=False):
          "tmp","temp","thumbnails","thumbcache","logs","Logs",
          "Crash Reports","crashpad","*.bak","*~"])
     e("  {}Syncing configs...{}", Y, N)
-    copy_progress(f"rclone copy ~/.config/ '{cfg_dest}/' --checkers {ck} {excludes}", desc="  Config", ntfs=True)
+    copy_progress(f"rclone copy ~/.config/ '{cfg_dest}/' {excludes}", checkers=ck, desc="  Config", ntfs=True)
     for item in [".ssh", ".gnupg", ".local/share/keyrings"]:
         src = os.path.join(HOME, item)
         if os.path.isdir(src):
@@ -226,7 +223,7 @@ def do_backup(dest, auto_yes=False):
         src = os.path.join(HOME, src_rel)
         if os.path.isdir(src):
             e("  {}Backing up {}...{}", Y, name, N)
-            copy_progress(f"rclone copy '{src}/' '{b_dest}/{name}/' --checkers {ck} {bx}", desc=f"  {name}", ntfs=True)
+            copy_progress(f"rclone copy '{src}/' '{b_dest}/{name}/' {bx}", checkers=ck, desc=f"  {name}", ntfs=True)
 
     # ── 4. VM data (virt-manager / libvirt) ──────────────────────────────
     e("{}--- Backing up VM data ---{}", M, N)
