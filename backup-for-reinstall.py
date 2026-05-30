@@ -7,6 +7,7 @@ Restore with fzf multi-select or numbered menu, with rclone progress display.
 
 import os, sys, subprocess, shutil, argparse, time
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor
 
 # ── tqdm (progress bar library) with minimal fallback ────────────────
 try:
@@ -30,6 +31,19 @@ LOG_FILE = None
 
 # Common exclude patterns shared across backup sections
 _CACHE_EXCLUDES = ["Cache","cache","Caches","Crash Reports","crashpad"]
+
+# Hardcoded paths used across backup/restore
+BACKUP_BASE = "/mnt/HDD4T/BACKUP"
+VM_QEMU_SRC = "/etc/libvirt/qemu"
+VM_IMAGES_SRC = "/var/lib/libvirt/images"
+
+# Browser profile paths: (relative_source_dir_in_home, dest_subdir_name)
+BROWSERS = [
+    (".mozilla", "mozilla"),
+    (".config/chromium", "chromium"),
+    (".config/google-chrome", "google-chrome"),
+    (".config/BraveSoftware", "BraveSoftware"),
+]
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -105,7 +119,7 @@ def detect_path():
     if os_id and os_id in host.lower():
         os_id = ""
     tag = f"-{os_id}" if os_id else ""
-    return f"/mnt/HDD4T/BACKUP/{host}{tag}"
+    return f"{BACKUP_BASE}/{host}{tag}"
 
 
 def detect_checkers(path):
@@ -132,6 +146,117 @@ def detect_checkers(path):
 
 
 # ═════════════════════════════════════════════════════════════════════════════
+#  BACKUP STEP FUNCTIONS
+# ═════════════════════════════════════════════════════════════════════════════
+
+def _save_package_lists(dest):
+    """Write package manifests (pacman, flatpak, snap) to *dest*."""
+    e("{}--- Saving package lists ---{}", M, N)
+    run("pacman -Qqen > '{}/pacman-official.txt'".format(dest), stderr=subprocess.DEVNULL)
+    run("pacman -Qqem > '{}/pacman-aur.txt'".format(dest), stderr=subprocess.DEVNULL)
+    run("flatpak list --app --columns=application > '{}/flatpak-list.txt' 2>/dev/null".format(dest))
+    run("snap list > '{}/snap-list.txt' 2>/dev/null".format(dest))
+
+
+def _estimate_home_size():
+    """Run gdu to estimate total home data size. Returns byte count (0 if gdu missing)."""
+    total = 0
+    if not shutil.which("gdu"):
+        return total
+    e("  {}Estimating size...{}", Y, N)
+    gdu_ignore = ",".join(
+        [".cache","node_modules","target",".next","snap",
+         ".npm",".cargo",".rustup",".gradle",".m2",
+         "VirtualBox VMs",".vagrant.d",".thumbnails",
+         "flatpak","Trash","Cache","Code Cache","GPUCache","Caches"])
+    dirs = ["Documents","Pictures","Music","Videos","Downloads","Desktop",
+            "Projects","Templates","Public","Games",
+            ".local",".fonts",".themes",".icons"]
+    for d in dirs:
+        p = os.path.join(HOME, d)
+        if os.path.isdir(p):
+            e("  {}  {}...{}", Y, d, N)
+            try:
+                sz = run(f"gdu -n -s -p --no-prefix --ignore-dirs '{gdu_ignore}' '{p}' 2>/dev/null | awk '{{print $1}}'",
+                         capture_output=True, shell=True, text=True, timeout=30).stdout.strip()
+            except subprocess.TimeoutExpired:
+                sz = ""
+            total += int(sz) if sz and sz.isdigit() else 0
+    e("  {}Estimated data size:{} {}{}{}", C, N, W, _fmt(total), N)
+    return total
+
+
+def _backup_config(dest, ck):
+    """Backup ~/.config and sensitive dot-files."""
+    e("{}--- Backing up configs ---{}", M, N)
+    e("  {}Source:{} ~/.config, ~/.ssh, ~/.gnupg", C, N)
+    e("  {}Target:{} {}/config", C, N, dest)
+    cfg_dest = os.path.join(dest, "config")
+    os.makedirs(cfg_dest, exist_ok=True)
+    excludes = " ".join(f"--exclude '{x}'" for x in
+        _CACHE_EXCLUDES + ["Trash","trash","Session","sessions",
+         "tmp","temp","thumbnails","thumbcache","logs","Logs",
+         "node_modules","*.bak","*~"])
+    e("  {}Syncing configs...{}", Y, N)
+    copy_progress(f"rclone copy ~/.config/ '{cfg_dest}/' {excludes}", checkers=ck, ntfs=True, skip_links=True)
+    for item in [".ssh", ".gnupg", ".local/share/keyrings"]:
+        src = os.path.join(HOME, item)
+        if os.path.isdir(src):
+            run(f"cp -a '{src}' '{dest}/' 2>/dev/null")
+
+
+def _backup_browsers(dest, ck):
+    """Backup browser profiles (Firefox, Chromium, Chrome, Brave)."""
+    e("{}--- Backing up browser data ---{}", M, N)
+    e("  {}Target:{} {}/browser", C, N, dest)
+    b_dest = os.path.join(dest, "browser")
+    os.makedirs(b_dest, exist_ok=True)
+    bx = " ".join(f"--exclude '{x}'" for x in
+        _CACHE_EXCLUDES + ["GPUCache","Code Cache",
+         "Dictionaries","Safe Browsing"])
+    for src_rel, name in BROWSERS:
+        src = os.path.join(HOME, src_rel)
+        if os.path.isdir(src):
+            e("  {}Backing up {}...{}", Y, name, N)
+            copy_progress(f"rclone copy '{src}/' '{b_dest}/{name}/' {bx}", checkers=ck, ntfs=True, skip_links=True)
+
+
+def _backup_vm(dest, ck):
+    """Backup libvirt VM configs and disk images (requires sudo)."""
+    e("{}--- Backing up VM data ---{}", M, N)
+    vm_dest = os.path.join(dest, "virt-manager")
+    os.makedirs(vm_dest, exist_ok=True)
+    if os.path.isdir(VM_QEMU_SRC):
+        e("  {}Backing up libvirt VM configs...{}", Y, N)
+        run("sudo cp -a '{}' '{}/' 2>/dev/null".format(VM_QEMU_SRC, vm_dest))
+    if os.path.isdir(VM_IMAGES_SRC):
+        imgsz = run("sudo du -sh '{}' | cut -f1".format(VM_IMAGES_SRC), capture_output=True, shell=True, text=True).stdout.strip()
+        e("  {}VM disk images:{} {}{}{}", C, N, W, imgsz, N)
+        e("  {}Syncing...{}", Y, N)
+        copy_progress(f"sudo rclone copy '{VM_IMAGES_SRC}/' '{vm_dest}/images/' --inplace", checkers=ck, ntfs=True)
+
+
+def _backup_home(dest, ck):
+    """Backup the full home directory via sudo rclone."""
+    print()
+    e("{}--- Backing up home data ---{}", M, N)
+    e("  {}Source:{} ~/ (full home, excluded: .cache, node_modules, etc.)", C, N)
+    e("  {}Target:{} {}/home", C, N, dest)
+    home_dest = os.path.join(dest, "home")
+    os.makedirs(home_dest, exist_ok=True)
+    print()
+    e("  {}Backing up home data (rclone)...{}", Y, N)
+    excludes = [".cache/",".local/share/Trash/",".thumbnails/",
+                "*__pycache__/","*.pyc","node_modules/","target/",".next/",
+                "snap/",".local/share/flatpak/",".npm/",".cargo/",".rustup/",
+                ".gradle/",".m2/","VirtualBox VMs/",".vagrant.d/",
+                "Cache/","Code Cache/","GPUCache/","Caches/",
+                "*~","*.bak","*.swp"]
+    hx = " ".join(f"--exclude '{x}'" for x in excludes)
+    copy_progress(f"sudo rclone copy ~/ '{home_dest}' --links --inplace {hx}", checkers=ck, ntfs=True)
+
+
+# ═════════════════════════════════════════════════════════════════════════════
 #  BACKUP
 # ═════════════════════════════════════════════════════════════════════════════
 
@@ -140,7 +265,7 @@ def do_backup(dest, auto_yes=False):
 
     Steps
     -----
-    1. Write package lists (pacman, yay, flatpak, snap).
+    1. Save package lists (pacman, yay, flatpak, snap) — in parallel with gdu estimation.
     2. Copy ``~/.config`` (with cache/trash excludes) plus ``.ssh``, ``.gnupg``, keyrings.
     3. Copy browser profiles (Firefox, Chromium, Chrome, Brave — cache excluded).
     4. Copy libvirt VM configs and disk images (sudo).
@@ -177,110 +302,18 @@ def do_backup(dest, auto_yes=False):
     ck = detect_checkers(dest)
     e("  {}Checkers:{} {}{}{}", C, N, W, ck, N)
 
-    # ── 1. Package lists ─────────────────────────────────────────────────
-    e("{}--- Saving package lists ---{}", M, N)
-    run("pacman -Qqen > '{}/pacman-official.txt'".format(dest), stderr=subprocess.DEVNULL)
-    run("pacman -Qqem > '{}/pacman-aur.txt'".format(dest), stderr=subprocess.DEVNULL)
-    run("flatpak list --app --columns=application > '{}/flatpak-list.txt' 2>/dev/null".format(dest))
-    run("snap list > '{}/snap-list.txt' 2>/dev/null".format(dest))
+    # Run gdu estimation in parallel with package lists
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        sz_future = pool.submit(_estimate_home_size)
+        _save_package_lists(dest)
+        sz_future.result()
 
-    # ── 2. Configs ───────────────────────────────────────────────────────
-    e("{}--- Backing up configs ---{}", M, N)
-    e("  {}Source:{} ~/.config, ~/.ssh, ~/.gnupg", C, N)
-    e("  {}Target:{} {}/config", C, N, dest)
-    cfg_dest = os.path.join(dest, "config")
-    os.makedirs(cfg_dest, exist_ok=True)
-    excludes = " ".join(f"--exclude '{x}'" for x in
-        _CACHE_EXCLUDES + ["Trash","trash","Session","sessions",
-         "tmp","temp","thumbnails","thumbcache","logs","Logs",
-         "node_modules","*.bak","*~"])
-    e("  {}Syncing configs...{}", Y, N)
-    copy_progress(f"rclone copy ~/.config/ '{cfg_dest}/' {excludes}", checkers=ck, ntfs=True, skip_links=True)
-    for item in [".ssh", ".gnupg", ".local/share/keyrings"]:
-        src = os.path.join(HOME, item)
-        if os.path.isdir(src):
-            run(f"cp -a '{src}' '{dest}/' 2>/dev/null")
+    _backup_config(dest, ck)
+    _backup_browsers(dest, ck)
+    _backup_vm(dest, ck)
+    _backup_home(dest, ck)
 
-    # ── 3. Browser data ──────────────────────────────────────────────────
-    e("{}--- Backing up browser data ---{}", M, N)
-    e("  {}Target:{} {}/browser", C, N, dest)
-    b_dest = os.path.join(dest, "browser")
-    os.makedirs(b_dest, exist_ok=True)
-    browsers = [
-        (".mozilla", "mozilla"),
-        (".config/chromium", "chromium"),
-        (".config/google-chrome", "google-chrome"),
-        (".config/BraveSoftware", "BraveSoftware"),
-    ]
-    bx = " ".join(f"--exclude '{x}'" for x in
-        _CACHE_EXCLUDES + ["GPUCache","Code Cache",
-         "Dictionaries","Safe Browsing"])
-    for src_rel, name in browsers:
-        src = os.path.join(HOME, src_rel)
-        if os.path.isdir(src):
-            e("  {}Backing up {}...{}", Y, name, N)
-            copy_progress(f"rclone copy '{src}/' '{b_dest}/{name}/' {bx}", checkers=ck, ntfs=True, skip_links=True)
-
-    # ── 4. VM data (virt-manager / libvirt) ──────────────────────────────
-    e("{}--- Backing up VM data ---{}", M, N)
-    vm_dest = os.path.join(dest, "virt-manager")
-    os.makedirs(vm_dest, exist_ok=True)
-    if os.path.isdir("/etc/libvirt/qemu"):
-        e("  {}Backing up libvirt VM configs...{}", Y, N)
-        run("sudo cp -a /etc/libvirt/qemu '{}/' 2>/dev/null".format(vm_dest))
-    if os.path.isdir("/var/lib/libvirt/images"):
-        imgsz = run("sudo du -sh /var/lib/libvirt/images | cut -f1", capture_output=True, shell=True, text=True).stdout.strip()
-        e("  {}VM disk images:{} {}{}{}", C, N, W, imgsz, N)
-        e("  {}Syncing...{}", Y, N)
-        copy_progress(f"sudo rclone copy /var/lib/libvirt/images/ '{vm_dest}/images/' --inplace", checkers=ck, ntfs=True)
-
-    # ── 5. Home data ─────────────────────────────────────────────────────
-    print()
-    e("{}--- Backing up home data ---{}", M, N)
-
-    e("  {}Source:{} ~/ (full home, excluded: .cache, node_modules, etc.)", C, N)
-    e("  {}Target:{} {}/home", C, N, dest)
-
-    home_dest = os.path.join(dest, "home")
-    os.makedirs(home_dest, exist_ok=True)
-    print()
-    e("  {}Backing up home data (rclone)...{}", Y, N)
-
-    excludes = [".cache/",".local/share/Trash/",".thumbnails/",
-                "*__pycache__/","*.pyc","node_modules/","target/",".next/",
-                "snap/",".local/share/flatpak/",".npm/",".cargo/",".rustup/",
-                ".gradle/",".m2/","VirtualBox VMs/",".vagrant.d/",
-                "Cache/","Code Cache/","GPUCache/","Caches/",
-                "*~","*.bak","*.swp"]
-    hx = " ".join(f"--exclude '{x}'" for x in excludes)
-
-    # gdu size estimate (fast, parallel scanner)
-    total = 0
-    if shutil.which("gdu"):
-        e("  {}Estimating size...{}", Y, N)
-        gdu_ignore = ",".join(
-            [".cache","node_modules","target",".next","snap",
-             ".npm",".cargo",".rustup",".gradle",".m2",
-             "VirtualBox VMs",".vagrant.d",".thumbnails",
-             "flatpak","Trash","Cache","Code Cache","GPUCache","Caches"])
-        dirs = ["Documents","Pictures","Music","Videos","Downloads","Desktop",
-                "Projects","Templates","Public","Games",
-                ".local",".fonts",".themes",".icons"]
-        for d in dirs:
-            p = os.path.join(HOME, d)
-            if os.path.isdir(p):
-                e("  {}  {}...{}", Y, d, N)
-                try:
-                    sz = run(f"gdu -n -s -p --no-prefix --ignore-dirs '{gdu_ignore}' '{p}' 2>/dev/null | awk '{{print $1}}'",
-                             capture_output=True, shell=True, text=True, timeout=30).stdout.strip()
-                except subprocess.TimeoutExpired:
-                    sz = ""
-                total += int(sz) if sz and sz.isdigit() else 0
-        e("  {}Estimated data size:{} {}{}{}", C, N, W, _fmt(total), N)
-
-    copy_progress(f"sudo rclone copy ~/ '{home_dest}' --links --inplace {hx}", checkers=ck, ntfs=True)
-
-    # ── Summary ──────────────────────────────────────────────────────────
+    # Summary
     print()
     sz_out = run(f"du -sh '{dest}' | cut -f1", capture_output=True, shell=True, text=True).stdout.strip()
     e("  {}=============================={}", G, N)
@@ -353,13 +386,11 @@ def do_restore(backup_dir, dest_dir, auto=False):
                         stderr=subprocess.DEVNULL))
 
     # Browser profiles
-    browsers = [("mozilla", ".mozilla"), ("chromium", ".config/chromium"),
-                 ("google-chrome", ".config/google-chrome"), ("BraveSoftware", ".config/BraveSoftware")]
-    for name, rel_dest in browsers:
+    for src_rel, name in BROWSERS:
         p = os.path.join(backup_dir, "browser", name)
         if os.path.isdir(p):
             add(f"browser-{name}", f"Restore {name}",
-                lambda p=p, rd=rel_dest: run(f"rclone copy '{p}/' '{dest_dir}/{rd}/' --checkers {ck} 2>/dev/null", stderr=subprocess.DEVNULL))
+                lambda p=p, rd=src_rel: run(f"rclone copy '{p}/' '{dest_dir}/{rd}/' --checkers {ck} 2>/dev/null", stderr=subprocess.DEVNULL))
 
     # SSH keys & GPG keys
     for name in (".ssh", ".gnupg"):
