@@ -69,11 +69,15 @@ def run_ok(cmd):
     return run(cmd, capture_output=True).returncode == 0
 
 
-def copy_progress(cmd, checkers=8, desc="  Syncing"):
-    """Run rclone (or any command), passing its --progress output through."""
+def copy_progress(cmd, checkers=8, desc="  Syncing", ntfs=False):
+    """Run rclone (or any command), passing its --progress output through.
+    Set *ntfs* = True to add ``--no-mtime --no-perms`` (avoids modtime/permission
+    errors when the target is an NTFS drive).
+    """
     import select, os
+    extra = " --no-mtime --no-perms" if ntfs else ""
     proc = subprocess.Popen(
-        f"stdbuf -oL {cmd} --progress --stats 1s --checkers {checkers}",
+        f"stdbuf -oL {cmd} --progress --stats 1s --checkers {checkers}{extra}",
         shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
         start_new_session=True
     )
@@ -97,7 +101,10 @@ def copy_progress(cmd, checkers=8, desc="  Syncing"):
                     idx = cr + 1; raw = buf[:idx]; buf = buf[idx:]
                 s = raw.strip(b'\r\n ')
                 if not s: continue
-                if s.startswith(b'WARNING') or s.startswith(b'ERROR') or s.startswith(b'Failed'):
+                if s[:2].isdigit() and b':' in s[:20]:
+                    # Rclone log line (timestamp prefix) — skip silently
+                    pass
+                elif s.startswith(b'WARNING') or s.startswith(b'ERROR') or s.startswith(b'Failed'):
                     warn += 1
                     if warn <= 10:
                         sys.stderr.buffer.write(raw)
@@ -229,7 +236,7 @@ def do_backup(dest, auto_yes=False):
          "tmp","temp","thumbnails","thumbcache","logs","Logs",
          "Crash Reports","crashpad","*.bak","*~"])
     e("  {}Syncing configs...{}", Y, N)
-    copy_progress(f"rclone copy ~/.config/ '{cfg_dest}/' --checkers {ck} {excludes}", desc="  Config")
+    copy_progress(f"rclone copy ~/.config/ '{cfg_dest}/' --checkers {ck} {excludes}", desc="  Config", ntfs=True)
     for item in [".ssh", ".gnupg", ".local/share/keyrings"]:
         src = os.path.join(HOME, item)
         if os.path.isdir(src):
@@ -253,7 +260,7 @@ def do_backup(dest, auto_yes=False):
         src = os.path.join(HOME, src_rel)
         if os.path.isdir(src):
             e("  {}Backing up {}...{}", Y, name, N)
-            copy_progress(f"rclone copy '{src}/' '{b_dest}/{name}/' --checkers {ck} {bx}", desc=f"  {name}")
+            copy_progress(f"rclone copy '{src}/' '{b_dest}/{name}/' --checkers {ck} {bx}", desc=f"  {name}", ntfs=True)
 
     # ── 4. VM data (virt-manager / libvirt) ──────────────────────────────
     e("{}--- Backing up VM data ---{}", M, N)
@@ -267,7 +274,7 @@ def do_backup(dest, auto_yes=False):
         e("  {}VM disk images:{} {}{}{}", C, N, W, imgsz, N)
         e("  {}Syncing...{}", Y, N)
         try:
-            copy_progress(f"sudo rclone copy /var/lib/libvirt/images/ '{vm_dest}/images/' --inplace", checkers=ck, desc="  VM images")
+            copy_progress(f"sudo rclone copy /var/lib/libvirt/images/ '{vm_dest}/images/' --inplace", checkers=ck, desc="  VM images", ntfs=True)
         except KeyboardInterrupt:
             e("  {}Backup cancelled.{}", R, N)
             return
@@ -317,7 +324,7 @@ def do_backup(dest, auto_yes=False):
         e("  {}Estimated data size:{} {}{}{}", C, N, W, _fmt(total), N)
 
     try:
-        copy_progress(f"sudo rclone copy ~/ '{home_dest}' --links --inplace {hx}", checkers=ck, desc="  Home")
+        copy_progress(f"sudo rclone copy ~/ '{home_dest}' --links --inplace {hx}", checkers=ck, desc="  Home", ntfs=True)
     except KeyboardInterrupt:
         e("  {}Backup cancelled.{}", R, N)
         return
