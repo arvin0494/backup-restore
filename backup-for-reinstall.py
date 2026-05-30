@@ -70,20 +70,19 @@ def run_ok(cmd):
 
 
 def copy_progress(cmd, checkers=8, desc="  Syncing", ntfs=False):
-    """Run rclone with its stderr connected to the real terminal so the
-    native in-place progress display works correctly."""
+    """Run rclone with progress output forwarded to stderr."""
     extra = " --ignore-errors" if ntfs else ""
-    proc = subprocess.Popen(
-        f"{cmd} --progress --stats 1s --checkers {checkers}{extra}",
-        shell=True, stdout=subprocess.DEVNULL, stderr=None,
-        start_new_session=True
-    )
+    full = f"{cmd} --progress --stats 1s --checkers {checkers}{extra}"
+    proc = subprocess.Popen(full, shell=True, stdout=subprocess.DEVNULL,
+                            stderr=subprocess.PIPE, start_new_session=True)
     try:
-        proc.wait()
+        for line in iter(proc.stderr.readline, b''):
+            sys.stderr.buffer.write(line)
+            sys.stderr.flush()
     except KeyboardInterrupt:
-        e("  {}Interrupted, shutting down...{}", Y, N)
+        e("  {}Interrupted.{}", Y, N)
         proc.send_signal(signal.SIGINT)
-        proc.wait()
+    proc.wait()
     return proc.returncode
 
 
