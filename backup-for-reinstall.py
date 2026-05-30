@@ -71,11 +71,11 @@ def run_ok(cmd):
 
 def copy_progress(cmd, checkers=8, desc="  Syncing", ntfs=False):
     """Run rclone (or any command), passing its --progress output through.
-    Set *ntfs* = True to add ``--no-mtime --no-perms`` (avoids modtime/permission
-    errors when the target is an NTFS drive).
+    Set *ntfs* = True to add ``--ignore-errors`` (skips modtime/permission
+    failures common on NTFS drives).
     """
     import select, os
-    extra = " --no-mtime --no-perms" if ntfs else ""
+    extra = " --ignore-errors" if ntfs else ""
     proc = subprocess.Popen(
         f"stdbuf -oL {cmd} --progress --stats 1s --checkers {checkers}{extra}",
         shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
