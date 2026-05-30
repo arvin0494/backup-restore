@@ -229,7 +229,7 @@ def do_backup(dest, auto_yes=False):
          "tmp","temp","thumbnails","thumbcache","logs","Logs",
          "Crash Reports","crashpad","*.bak","*~"])
     e("  {}Syncing configs...{}", Y, N)
-    run(f"rclone copy ~/.config/ '{cfg_dest}/' --checkers {ck} {excludes} 2>/dev/null", stderr=subprocess.DEVNULL)
+    copy_progress(f"rclone copy ~/.config/ '{cfg_dest}/' --checkers {ck} {excludes}", desc="  Config")
     for item in [".ssh", ".gnupg", ".local/share/keyrings"]:
         src = os.path.join(HOME, item)
         if os.path.isdir(src):
@@ -249,10 +249,11 @@ def do_backup(dest, auto_yes=False):
     bx = " ".join(f"--exclude '{x}'" for x in
         ["Cache","cache","Caches","GPUCache","Code Cache",
          "Crash Reports","crashpad","Dictionaries","Safe Browsing"])
-    for src_rel, name in tqdm(browsers, desc="  Browsers", unit="browser", bar_format="{desc} {bar} {n_fmt}/{total_fmt} {unit}s"):
+    for src_rel, name in browsers:
         src = os.path.join(HOME, src_rel)
         if os.path.isdir(src):
-            run(f"rclone copy '{src}/' '{b_dest}/{name}/' --checkers {ck} {bx} 2>/dev/null", stderr=subprocess.DEVNULL)
+            e("  {}Backing up {}...{}", Y, name, N)
+            copy_progress(f"rclone copy '{src}/' '{b_dest}/{name}/' --checkers {ck} {bx}", desc=f"  {name}")
 
     # ── 4. VM data (virt-manager / libvirt) ──────────────────────────────
     e("{}--- Backing up VM data ---{}", M, N)
