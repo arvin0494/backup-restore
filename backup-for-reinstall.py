@@ -70,38 +70,46 @@ def run_ok(cmd):
 
 
 def rsync_progress(cmd, desc="  Syncing"):
-    """Run rsync, passing all stderr output straight through so the user
-    sees native rsync progress (filenames, speeds, file count, ETA)."""
+    """Run rsync, showing native progress while limiting warnings."""
     import select, os
     proc = subprocess.Popen(
         f"stdbuf -oL {cmd} --info=progress2 --progress",
         shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
         start_new_session=True
     )
-    fd = proc.stderr.fileno()
+    fd = proc.stderr.fileno(); buf = b""; warn = 0
     try:
         while True:
             r, _, _ = select.select([fd], [], [], 0.2)
             if r:
                 chunk = os.read(fd, 65536)
-                if not chunk:
-                    break
-                sys.stderr.buffer.write(chunk)
-                sys.stderr.flush()
+                if not chunk: break
+                buf += chunk
             elif proc.poll() is not None:
-                # Drain any leftover data
-                while True:
-                    chunk = os.read(fd, 65536)
-                    if not chunk:
-                        break
-                    sys.stderr.buffer.write(chunk)
-                    sys.stderr.flush()
                 break
+            while True:
+                cr = buf.find(b'\r')
+                nl = buf.find(b'\n')
+                if cr < 0 and nl < 0: break
+                if nl >= 0 and (cr < 0 or nl < cr):
+                    idx = nl + 1; raw = buf[:idx]; buf = buf[idx:]
+                else:
+                    idx = cr + 1; raw = buf[:idx]; buf = buf[idx:]
+                s = raw.strip(b'\r\n ')
+                if not s: continue
+                if s.startswith(b'rsync:'):
+                    warn += 1
+                    if warn <= 10:
+                        sys.stderr.buffer.write(raw)
+                else:
+                    sys.stderr.buffer.write(raw)
+                sys.stderr.flush()
     except KeyboardInterrupt:
         e("  {}Interrupted, shutting down rsync...{}", Y, N)
         proc.send_signal(signal.SIGINT)
     proc.wait()
-    sys.stderr.flush()
+    if warn > 10:
+        e("  {}... ({} more warnings suppressed){}", Y, warn - 10, N)
     return proc.returncode
 
 
