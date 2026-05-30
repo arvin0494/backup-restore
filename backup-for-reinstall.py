@@ -70,110 +70,38 @@ def run_ok(cmd):
 
 
 def rsync_progress(cmd, desc="  Syncing"):
-    """Run an rsync command and display a live tqdm progress bar.
-
-    Reads raw stderr output from rsync (which uses ``\\r`` and ``\\n`` line endings)
-    so that per-file progress lines are processed immediately for smooth speed updates.
-    Before the progress bar starts, shows the current file being scanned/transferred
-    so the user can see something is happening.
-    """
+    """Run rsync, passing all stderr output straight through so the user
+    sees native rsync progress (filenames, speeds, file count, ETA)."""
     import select, os
-
     proc = subprocess.Popen(
         f"stdbuf -oL {cmd} --info=progress2 --progress",
         shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
-        text=False, start_new_session=True
+        start_new_session=True
     )
-    pat = re.compile(r'\(xfr#\d+,\s*(?:ir-)?(?:to-)?chk=(\d+)/(\d+)\)')
-    speed_pat = re.compile(r'(\d+[\.,]?\d*\s*[kKMG]?B/s)')
-    total = None; pbar = None; cur_speed = ""; cur_file = ""
-    last_show = 0; fd = proc.stderr.fileno(); buf = b""
-
-    def show_cur():
-        p = cur_file.strip()
-        if p:
-            # Truncate long paths, show basename
-            name = p.rsplit('/', 1)[-1] if '/' in p else p
-            if len(name) > 60:
-                name = "..." + name[-57:]
-            return name
-        return ""
-
+    fd = proc.stderr.fileno()
     try:
         while True:
-            r, _, _ = select.select([fd], [], [], 0.5)
+            r, _, _ = select.select([fd], [], [], 0.2)
             if r:
                 chunk = os.read(fd, 65536)
                 if not chunk:
                     break
-                buf += chunk
+                sys.stderr.buffer.write(chunk)
+                sys.stderr.flush()
             elif proc.poll() is not None:
+                # Drain any leftover data
+                while True:
+                    chunk = os.read(fd, 65536)
+                    if not chunk:
+                        break
+                    sys.stderr.buffer.write(chunk)
+                    sys.stderr.flush()
                 break
-            # Process all complete lines (\r or \n terminated)
-            while True:
-                cr = buf.find(b'\r')
-                nl = buf.find(b'\n')
-                if cr < 0 and nl < 0:
-                    break
-                if nl >= 0 and (cr < 0 or nl < cr):
-                    idx = nl + 1
-                else:
-                    idx = cr + 1
-                raw_line = buf[:idx].strip(b'\r\n ')
-                buf = buf[idx:]
-                if not raw_line:
-                    continue
-                line = raw_line.decode(errors='replace')
-                m = pat.search(line)
-                if m:
-                    rem = int(m.group(1)); t = int(m.group(2))
-                    if total is None:
-                        total = t
-                        if total:
-                            # Clear the scanning status line before drawing the bar
-                            sys.stderr.write("\033[2K\r")
-                            pbar = tqdm(total=total, unit="file", desc=desc, ncols=80,
-                                        bar_format="{desc} {bar} {n_fmt}/{total_fmt} [{elapsed}<{remaining}]")
-                    if pbar and total:
-                        pbar.n = total - rem
-                        pbar.refresh()
-                    sm = speed_pat.search(line)
-                    if sm:
-                        cur_speed = sm.group(1)
-                    if pbar:
-                        bar = desc
-                        if cur_speed:
-                            bar += f" [{cur_speed}]"
-                        f = show_cur()
-                        if f:
-                            bar += f" {f}"
-                        pbar.set_description(bar)
-                else:
-                    # Not a progress summary line — could be a file path
-                    s = line.strip()
-                    # Skip lines that look like per-file progress (start with spaces/numbers)
-                    if s and not s[0] in (' ', '\t', '(') and not s.startswith('sending'):
-                        cur_file = s
-                    # Before the bar exists, show current file live
-                    if pbar is None and s:
-                        t = time.monotonic()
-                        if t - last_show >= 0.1:
-                            last_show = t
-                            f = s.rsplit('/', 1)[-1] if '/' in s else s
-                            if len(f) > 80:
-                                f = "..." + f[-77:]
-                            sys.stderr.write(f"\r\033[K  {desc.strip()} {f}")
     except KeyboardInterrupt:
-        e("{}Interrupted, shutting down rsync...{}", Y, N)
+        e("  {}Interrupted, shutting down rsync...{}", Y, N)
         proc.send_signal(signal.SIGINT)
-        proc.wait()
-        if pbar:
-            pbar.close()
-        raise
     proc.wait()
-    if pbar:
-        pbar.n = pbar.total if pbar.total else 0
-        pbar.refresh(); pbar.close()
+    sys.stderr.flush()
     return proc.returncode
 
 
