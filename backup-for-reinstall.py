@@ -72,7 +72,7 @@ def run_ok(cmd):
 def copy_progress(cmd, checkers=8, desc="  Syncing", ntfs=False):
     """Run rclone with its native --progress bar."""
     extra = " --ignore-errors" if ntfs else ""
-    full = f"{cmd} --progress --stats 1s --checkers {checkers}{extra}"
+    full = f"{cmd} --progress --stats 1s --checkers {checkers} --transfers {checkers}{extra}"
     proc = subprocess.Popen(full, shell=True)
     try:
         proc.wait()
