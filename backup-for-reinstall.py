@@ -69,11 +69,11 @@ def run_ok(cmd):
     return run(cmd, capture_output=True).returncode == 0
 
 
-def copy_progress(cmd, desc="  Syncing"):
+def copy_progress(cmd, checkers=8, desc="  Syncing"):
     """Run rclone (or any command), passing its --progress output through."""
     import select, os
     proc = subprocess.Popen(
-        f"stdbuf -oL {cmd} --progress",
+        f"stdbuf -oL {cmd} --progress --checkers {checkers}",
         shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
         start_new_session=True
     )
@@ -142,6 +142,29 @@ def detect_path():
     return f"/mnt/HDD4T/BACKUP/{host}{tag}"
 
 
+def detect_checkers(path):
+    """Return optimal rclone ``--checkers`` count for the drive holding *path*.
+    HDD → 1 (sequential, minimal seeking), SSD → 8, NVMe → 16.
+    """
+    try:
+        out = subprocess.run(
+            ["findmnt", "-n", "-o", "SOURCE", "--target", path],
+            capture_output=True, text=True).stdout.strip()
+        if not out:
+            return 8
+        dev = out.rsplit("/", 1)[-1]
+        dev = re.sub(r"\d+$", "", dev)
+        dev = re.sub(r"p\d+$", "", dev)
+        rot = f"/sys/block/{dev}/queue/rotational"
+        if os.path.isfile(rot):
+            with open(rot) as f:
+                if f.read().strip() == "1":
+                    return 1
+        return 16 if dev.startswith("nvme") else 8
+    except Exception:
+        return 8
+
+
 # ═════════════════════════════════════════════════════════════════════════════
 #  BACKUP
 # ═════════════════════════════════════════════════════════════════════════════
@@ -185,6 +208,9 @@ def do_backup(dest, auto_yes=False):
                 print(); return
     print()
 
+    ck = detect_checkers(dest)
+    e("  {}Checkers:{} {}{}{}", C, N, W, ck, N)
+
     # ── 1. Package lists ─────────────────────────────────────────────────
     e("{}--- Saving package lists ---{}", M, N)
     run("pacman -Qqen > '{}/pacman-official.txt'".format(dest), stderr=subprocess.DEVNULL)
@@ -203,7 +229,7 @@ def do_backup(dest, auto_yes=False):
          "tmp","temp","thumbnails","thumbcache","logs","Logs",
          "Crash Reports","crashpad","*.bak","*~"])
     e("  {}Syncing configs...{}", Y, N)
-    run(f"rclone copy ~/.config/ '{cfg_dest}/' {excludes} 2>/dev/null", stderr=subprocess.DEVNULL)
+    run(f"rclone copy ~/.config/ '{cfg_dest}/' --checkers {ck} {excludes} 2>/dev/null", stderr=subprocess.DEVNULL)
     for item in [".ssh", ".gnupg", ".local/share/keyrings"]:
         src = os.path.join(HOME, item)
         if os.path.isdir(src):
@@ -226,7 +252,7 @@ def do_backup(dest, auto_yes=False):
     for src_rel, name in tqdm(browsers, desc="  Browsers", unit="browser", bar_format="{desc} {bar} {n_fmt}/{total_fmt} {unit}s"):
         src = os.path.join(HOME, src_rel)
         if os.path.isdir(src):
-            run(f"rclone copy '{src}/' '{b_dest}/{name}/' {bx} 2>/dev/null", stderr=subprocess.DEVNULL)
+            run(f"rclone copy '{src}/' '{b_dest}/{name}/' --checkers {ck} {bx} 2>/dev/null", stderr=subprocess.DEVNULL)
 
     # ── 4. VM data (virt-manager / libvirt) ──────────────────────────────
     e("{}--- Backing up VM data ---{}", M, N)
@@ -240,7 +266,7 @@ def do_backup(dest, auto_yes=False):
         e("  {}VM disk images:{} {}{}{}", C, N, W, imgsz, N)
         e("  {}Syncing...{}", Y, N)
         try:
-            copy_progress(f"sudo rclone copy /var/lib/libvirt/images/ '{vm_dest}/images/' --inplace", desc="  VM images")
+            copy_progress(f"sudo rclone copy /var/lib/libvirt/images/ '{vm_dest}/images/' --inplace", checkers=ck, desc="  VM images")
         except KeyboardInterrupt:
             e("  {}Backup cancelled.{}", R, N)
             return
@@ -290,7 +316,7 @@ def do_backup(dest, auto_yes=False):
         e("  {}Estimated data size:{} {}{}{}", C, N, W, _fmt(total), N)
 
     try:
-        copy_progress(f"sudo rclone copy ~/ '{home_dest}' --links --inplace {hx}", desc="  Home")
+        copy_progress(f"sudo rclone copy ~/ '{home_dest}' --links --inplace {hx}", checkers=ck, desc="  Home")
     except KeyboardInterrupt:
         e("  {}Backup cancelled.{}", R, N)
         return
@@ -330,6 +356,8 @@ def do_restore(backup_dir, dest_dir, auto=False):
 
     e("{}Backup:{} {}{}{}", C, N, W, backup_dir, N)
     e("{}Restore to:{} {}{}{}", C, N, W, dest_dir, N)
+    ck = detect_checkers(dest_dir)
+    e("  {}Checkers:{} {}{}{}", C, N, W, ck, N)
     print()
 
     if not os.path.isdir(backup_dir):
@@ -360,7 +388,7 @@ def do_restore(backup_dir, dest_dir, auto=False):
     # Config (restore ~/.config)
     if os.path.isdir(os.path.join(backup_dir, "config")):
         add("config", "Restore ~/.config",
-            lambda: run("rclone copy '{}/config/' '{}/.config/'".format(backup_dir, dest_dir),
+            lambda: run("rclone copy '{}/config/' '{}/.config/' --checkers {}".format(backup_dir, dest_dir, ck),
                         stderr=subprocess.DEVNULL))
 
     # Browser profiles
@@ -370,30 +398,30 @@ def do_restore(backup_dir, dest_dir, auto=False):
         p = os.path.join(backup_dir, "browser", name)
         if os.path.isdir(p):
             add(f"browser-{name}", f"Restore {name}",
-                lambda p=p, rd=rel_dest: run(f"rclone copy '{p}/' '{dest_dir}/{rd}/' 2>/dev/null", stderr=subprocess.DEVNULL))
+                lambda p=p, rd=rel_dest: run(f"rclone copy '{p}/' '{dest_dir}/{rd}/' --checkers {ck} 2>/dev/null", stderr=subprocess.DEVNULL))
 
     # SSH keys & GPG keys
     for name in (".ssh", ".gnupg"):
         p = os.path.join(backup_dir, name)
         if os.path.isdir(p):
             add(name.lstrip("."), f"Restore ~/{name}",
-                lambda p=p: run(f"rclone copy '{p}/' '{dest_dir}/{name}/' 2>/dev/null"))
+                lambda p=p: run(f"rclone copy '{p}/' '{dest_dir}/{name}/' --checkers {ck} 2>/dev/null"))
 
     # Login keyrings
     keyrings = os.path.join(backup_dir, "keyrings")
     if os.path.isdir(keyrings):
         add("keyrings", "Restore keyrings (~/.local/share/keyrings)",
-            lambda: run("rclone copy '{}/' '{}/.local/share/keyrings/' 2>/dev/null".format(keyrings, dest_dir)))
+            lambda: run("rclone copy '{}/' '{}/.local/share/keyrings/' --checkers {} 2>/dev/null".format(keyrings, dest_dir, ck)))
 
     # VM configs & disk images (system paths, need sudo)
     vm_qemu = os.path.join(backup_dir, "virt-manager", "qemu")
     if os.path.isdir(vm_qemu):
         add("vm-configs", "Restore libvirt VM configs (/etc/libvirt/qemu)",
-            lambda: run("sudo rclone copy '{}/qemu/' /etc/libvirt/qemu/ 2>/dev/null".format(os.path.join(backup_dir, "virt-manager"))))
+            lambda: run("sudo rclone copy '{}/qemu/' /etc/libvirt/qemu/ --checkers {} 2>/dev/null".format(os.path.join(backup_dir, "virt-manager"), ck)))
     vm_images = os.path.join(backup_dir, "virt-manager", "images")
     if os.path.isdir(vm_images):
         add("vm-images", "Restore VM disk images (/var/lib/libvirt/images)",
-            lambda: run("sudo rclone copy '{}/' /var/lib/libvirt/images/ 2>/dev/null".format(vm_images)))
+            lambda: run("sudo rclone copy '{}/' /var/lib/libvirt/images/ --checkers {} 2>/dev/null".format(vm_images, ck)))
 
     # Per-subdirectory home data
     home_src = os.path.join(backup_dir, "home")
@@ -402,7 +430,7 @@ def do_restore(backup_dir, dest_dir, auto=False):
             sp = os.path.join(home_src, sub)
             if os.path.isdir(sp):
                 add(f"home-{sub}", f"Restore ~/{sub}",
-                    lambda sub=sub: run("rclone copy '{}/home/{}/' '{}/{}/' 2>/dev/null".format(backup_dir, sub, dest_dir, sub)))
+                    lambda sub=sub: run("rclone copy '{}/home/{}/' '{}/{}/' --checkers {} 2>/dev/null".format(backup_dir, sub, dest_dir, sub, ck)))
 
     if not items:
         e("{}Nothing found to restore in that directory{}", R, N)
