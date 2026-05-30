@@ -77,7 +77,7 @@ def copy_progress(cmd, checkers=8, desc="  Syncing", ntfs=False):
                             stderr=subprocess.PIPE, start_new_session=True)
     try:
         for line in iter(proc.stderr.readline, b''):
-            if b' ERROR :' not in line:
+            if b' ERROR :' not in line and b"Can't follow symlink" not in line:
                 sys.stderr.buffer.write(line)
                 sys.stderr.flush()
     except KeyboardInterrupt:
@@ -201,7 +201,7 @@ def do_backup(dest, auto_yes=False):
     excludes = " ".join(f"--exclude '{x}'" for x in
         ["Cache","cache","Caches","Trash","trash","Session","sessions",
          "tmp","temp","thumbnails","thumbcache","logs","Logs",
-         "Crash Reports","crashpad","*.bak","*~"])
+         "Crash Reports","crashpad","node_modules","*.bak","*~"])
     e("  {}Syncing configs...{}", Y, N)
     copy_progress(f"rclone copy ~/.config/ '{cfg_dest}/' {excludes}", checkers=ck, desc="  Config", ntfs=True)
     for item in [".ssh", ".gnupg", ".local/share/keyrings"]:
