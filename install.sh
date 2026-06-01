@@ -124,6 +124,26 @@ shell_aliases() {
     fi
 }
 
+# ── Create default config ─────────────────────────────────
+create_config() {
+    local cfg_dir="$HOME/.config/backup-restore"
+    local cfg_file="$cfg_dir/config"
+    if [[ -f "$cfg_file" ]]; then
+        ok "Config already exists at $cfg_file"
+        return
+    fi
+    mkdir -p "$cfg_dir"
+    cat > "$cfg_file" <<EOF
+# backup-restore configuration
+# Uncomment and edit to override defaults.
+
+BACKUP_BASE=/mnt/HDD4T/BACKUP
+# VM_QEMU_SRC=/etc/libvirt/qemu
+# VM_IMAGES_SRC=/var/lib/libvirt/images
+EOF
+    ok "Default config created at $cfg_file"
+}
+
 # ── Print usage / curl hint ────────────────────────────────
 cat <<EOF
 
@@ -135,6 +155,7 @@ ensure_rust
 clone_repo
 build_binary
 shell_aliases
+create_config
 
 info "Python version also available at: $DEST/backup-for-reinstall.py"
 cat <<EOF
