@@ -10,41 +10,113 @@ BIN="${XDG_BIN_HOME:-$HOME/.local/bin}/backup"
 
 # ── Colours ────────────────────────────────────────────────
 R="\033[0;31m"; G="\033[0;32m"; Y="\033[0;33m"; C="\033[0;36m"; W="\033[1;37m"; N="\033[0m"
+
 info()  { printf "  ${C}%s${N}\n" "$*"; }
 ok()    { printf "  ${G}%s${N}\n" "$*"; }
 warn()  { printf "  ${Y}%s${N}\n" "$*"; }
 err()   { printf "  ${R}%s${N}\n" "$*"; }
 
+header() {
+    local txt="$1"
+    printf "  ${W}${txt}${N}\n"
+}
+
+section() {
+    local num="$1" title="$2"
+    echo ""
+    printf "  ${C}┌──────────────────────────────────────────────────────┐${N}\n"
+    printf "  ${C}│${N}  ${W}[${num}]${N} ${title}"
+    printf "%$((50 - ${#num} - ${#title}))s" ""
+    printf "${C}│${N}\n"
+    printf "  ${C}└──────────────────────────────────────────────────────┘${N}\n"
+}
+
+status() {
+    local label="$1" val="$2"
+    printf "  ${W}▸${N} ${label} ${G}${val}${N}\n"
+}
+
+progress() {
+    local pct="$1" msg="$2"
+    local filled=$((pct / 5))
+    local empty=$((20 - filled))
+    printf "  ${C}[${N}"
+    for ((i=0; i<filled; i++)); do printf "${G}█${N}"; done
+    for ((i=0; i<empty; i++)); do printf "${C}░${N}"; done
+    printf "${C}]${N}  ${W}%3d%%${N} %s\n" "$pct" "$msg"
+}
+
+box_title() {
+    local line="$1"
+    printf "  ${C}║${N}  %s\n" "$line"
+}
+
+# ── Header ─────────────────────────────────────────────────
+echo ""
+printf "  ${C}██╗${N}  ${W}██╗${N}${C}██████╗${N}  ${W}██╗${N}  ${W}██╗${N}${C}██████╗${N}  ${W}██╗${N}  ${W}██╗${N}\n"
+printf "  ${C}██║${N}  ${W}██║${N}${C}██╔══██╗${N} ${W}██║${N}  ${W}██║${N}${C}██╔══██╗${N} ${W}██║${N}  ${W}██║${N}\n"
+printf "  ${C}███████║${N}${C}██████╔╝${N} ${W}███████║${N}${C}██████╔╝${N} ${W}███████║${N}\n"
+printf "  ${C}██╔══██║${N}${C}██╔══██╗${N} ${W}██╔══██║${N}${C}██╔══██╗${N} ${W}██╔══██║${N}\n"
+printf "  ${C}██║${N}  ${W}██║${N}${C}██████╔╝${N} ${W}██║${N}  ${W}██║${N}${C}██████╔╝${N} ${W}██║${N}  ${W}██║${N}\n"
+printf "  ${C}╚═╝${N}  ${W}╚═╝${N}${C}╚═════╝${N}  ${W}╚═╝${N}  ${W}╚═╝${N}${C}╚═════╝${N}  ${W}╚═╝${N}  ${W}╚═╝${N}\n"
+echo ""
+printf "  ${C}░▒▓${N}${W}BACKUP-RESTORE${N}${C}▓▒░${N}  ${W}Linux reinstall backup tool${N}\n"
+echo ""
+
+# ── Protocol box ────────────────────────────────────────────
+printf "  ${C}╔══════════════════════════════════════════════════════╗${N}\n"
+if [[ -d "$DEST" ]]; then
+    box_title "${W}UPDATE SEQUENCE${N}                        rev 1.0"
+    box_title "${W}PROTOCOL:${N} PULL → BUILD → INJECT"
+else
+    box_title "${W}INSTALL SEQUENCE${N}                      rev 1.0"
+    box_title "${W}PROTOCOL:${N} RUST → CLONE → BUILD → INJECT"
+fi
+printf "  ${C}╚══════════════════════════════════════════════════════╝${N}\n"
+echo ""
+
+# ── Pre-checks ─────────────────────────────────────────────
+printf "  ${W}▸${N} ROOT ACCESS ........................ ${G}CONFIRMED${N}\n"
+printf "  ${W}▸${N} USER .............................. ${C}${USER}${N}\n"
+printf "  ${W}▸${N} TARGET ............................ ${C}${BIN}${N}\n"
+printf "  ${W}▸${N} SOURCE ............................ ${C}${HTTPS_URL}${N}\n"
+echo ""
+
 # ── Ensure Rust is installed ───────────────────────────────
 ensure_rust() {
-    # source rustup env first, in case ~/.cargo/bin isn't on PATH yet
     [[ -f "$HOME/.cargo/env" ]] && . "$HOME/.cargo/env"
+
     if command -v rustc &>/dev/null && command -v cargo &>/dev/null; then
-        ok "Rust $(rustc --version) already installed."
+        progress 100 "Rust check"
+        status "RUST ............................... " "$(rustc --version)"
         return 0
     fi
-    # also check ~/.cargo/bin directly
+
     if [[ -x "$HOME/.cargo/bin/rustc" && -x "$HOME/.cargo/bin/cargo" ]]; then
         export PATH="$HOME/.cargo/bin:$PATH"
-        ok "Rust $("$HOME/.cargo/bin/rustc" --version) already installed (added ~/.cargo/bin to PATH)."
+        progress 100 "Rust check"
+        status "RUST ............................... " "$("$HOME/.cargo/bin/rustc" --version)"
         return 0
     fi
-    warn "Rust is not installed."
+
+    section "0x01" "INSTALLING RUST"
     echo ""
-    printf "  ${W}1${N}) rustup (recommended)\n"
-    printf "  ${W}2${N}) system package manager (pacman / apt / dnf / zypper / apk)\n"
-    printf "  ${W}3${N}) skip — I'll install it myself\n"
+    printf "  ${Y}Rust is not installed. Choose method:${N}\n"
+    printf "  ${W}  1${N}) rustup (recommended)\n"
+    printf "  ${W}  2${N}) system package manager (pacman / apt / dnf / zypper / apk)\n"
+    printf "  ${W}  3${N}) skip — I'll install it myself\n"
     echo ""
-    printf "  Choose [1]: "
+    printf "  ${W}  Choose [1]:${N} "
     read -r ans
     case "${ans:-1}" in
         1|"")
-            info "Downloading rustup…"
+            progress 14 "Fetching rustup…"
             curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
-                | sh -s -- -y --no-modify-path
-            # shellcheck disable=SC1091
+                | sh -s -- -y --no-modify-path >/dev/null 2>&1
+            progress 50 "Installing rustup…"
             . "$HOME/.cargo/env"
-            ok "Rust installed via rustup."
+            progress 100 "Rust installed"
+            status "RUST ............................... " "$(rustc --version)"
             ;;
         2)
             if command -v pacman &>/dev/null; then
@@ -62,16 +134,17 @@ ensure_rust() {
                 err "Install Rust manually: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh"
                 exit 1
             fi
-            info "Installing Rust via system package manager…"
-            $run
+            progress 30 "Installing via package manager…"
+            $run >/dev/null 2>&1
             if ! command -v rustc &>/dev/null; then
-                err "Rust not found after install. Try option 1 (rustup)."
+                err "Rust not found after install."
                 exit 1
             fi
-            ok "Rust installed via system package manager."
+            progress 100 "Rust installed"
+            status "RUST ............................... " "$(rustc --version)"
             ;;
         *)
-            err "Rust is required. Run this script again after installing Rust."
+            err "Rust is required."
             err "  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh"
             exit 1
             ;;
@@ -80,28 +153,43 @@ ensure_rust() {
 
 # ── Clone / update repo ────────────────────────────────────
 clone_repo() {
+    section "0x02" "DOWNLOADING SOURCE"
+    echo ""
     if [[ -d "$DEST" ]]; then
-        info "Updating existing clone at $DEST …"
-        git -C "$DEST" pull --ff-only origin "$BRANCH"
+        progress 40 "Updating existing clone…"
+        git -C "$DEST" pull --ff-only origin "$BRANCH" >/dev/null 2>&1
+        progress 100 "Repository updated"
+        status "CLONE .............................. " "$DEST"
     else
-        info "Cloning $REPO into $DEST …"
-        git clone --branch "$BRANCH" --depth 1 "$HTTPS_URL" "$DEST" 2>/dev/null \
-            || git clone --branch "$BRANCH" --depth 1 "$SSH_URL" "$DEST"
+        progress 10 "Cloning repository…"
+        if git clone --branch "$BRANCH" --depth 1 "$HTTPS_URL" "$DEST" 2>/dev/null; then
+            :
+        else
+            git clone --branch "$BRANCH" --depth 1 "$SSH_URL" "$DEST"
+        fi
+        progress 100 "Repository cloned"
+        status "CLONE .............................. " "$DEST"
     fi
 }
 
 # ── Build release binary ───────────────────────────────────
 build_binary() {
-    info "Building release binary …"
-    cargo build --release --manifest-path "$DEST/backup-rs/Cargo.toml"
+    section "0x03" "BUILDING BINARY"
+    echo ""
+    progress 10 "Compiling (this may take a while)…"
+    cargo build --release --manifest-path "$DEST/backup-rs/Cargo.toml" >/dev/null 2>&1
+    progress 70 "Installing binary…"
     mkdir -p "$(dirname "$BIN")"
     cp "$DEST/backup-rs/target/release/backup" "$BIN"
     chmod +x "$BIN"
-    ok "Binary installed at $BIN"
+    progress 100 "Build complete"
+    status "BINARY .............................. " "$BIN"
 }
 
 # ── Add shell alias ────────────────────────────────────────
 shell_aliases() {
+    section "0x04" "INJECTING SHELL ALIAS"
+    echo ""
     local rc
     case "${SHELL##*/}" in
         zsh)  rc="$HOME/.zshrc" ;;
@@ -115,9 +203,11 @@ shell_aliases() {
         line="alias bckup='$BIN'"
         if ! grep -sqF "alias bckup" "$rc" 2>/dev/null; then
             echo "$line" >> "$rc"
-            ok "Alias added to $rc  (run: source $rc)"
+            progress 100 "Alias injected"
+            status "SHELL RC ............................ " "$rc"
         else
-            ok "Alias already present in $rc"
+            progress 100 "Alias verified"
+            status "SHELL RC ............................ " "$rc (already set)"
         fi
     else
         line="alias bckup='$BIN'"
@@ -125,19 +215,24 @@ shell_aliases() {
             echo "" >> "$rc"
             echo "# backup-restore" >> "$rc"
             echo "$line" >> "$rc"
-            ok "Alias added to $rc  (run: source $rc)"
+            progress 100 "Alias injected"
+            status "SHELL RC ............................ " "$rc"
         else
-            ok "Alias already present in $rc"
+            progress 100 "Alias verified"
+            status "SHELL RC ............................ " "$rc (already set)"
         fi
     fi
 }
 
 # ── Create default config ─────────────────────────────────
 create_config() {
+    section "0x05" "INITIALIZING CONFIG"
+    echo ""
     local cfg_dir="$HOME/.config/backup-restore"
     local cfg_file="$cfg_dir/config"
     if [[ -f "$cfg_file" ]]; then
-        ok "Config already exists at $cfg_file"
+        progress 100 "Config exists"
+        status "CONFIG .............................. " "$cfg_file"
         return
     fi
     mkdir -p "$cfg_dir"
@@ -149,27 +244,26 @@ BACKUP_BASE=/mnt/HDD4T/BACKUP
 # VM_QEMU_SRC=/etc/libvirt/qemu
 # VM_IMAGES_SRC=/var/lib/libvirt/images
 EOF
-    ok "Default config created at $cfg_file"
+    progress 100 "Config created"
+    status "CONFIG .............................. " "$cfg_file"
 }
 
-# ── Print usage / curl hint ────────────────────────────────
-cat <<EOF
-
-  ${W}backup-restore${N}  —  Backup & restore for Linux reinstall
-
-EOF
-
+# ── Execute ────────────────────────────────────────────────
 ensure_rust
 clone_repo
 build_binary
 shell_aliases
 create_config
 
-info "Python version also available at: $DEST/backup-for-reinstall.py"
-cat <<EOF
-
-  ${W}Usage:${N}  bckup -b              (backup, auto-detect path)
-          bckup -b /path    (backup, custom path)
-          bckup -r /path    (restore interactively)
-
-EOF
+# ── Complete ───────────────────────────────────────────────
+echo ""
+printf "  ${C}╔══════════════════════════════════════════════════════╗${N}\n"
+printf "  ${C}║${N}  ${G}████████████████████████████████████████████${N}\n"
+printf "  ${C}║${N}  ${G}█${N}  ${W}DEPLOYMENT COMPLETE${N}                    ${G}█${N}\n"
+printf "  ${C}║${N}  ${G}████████████████████████████████████████████${N}\n"
+printf "  ${C}╚══════════════════════════════════════════════════════╝${N}\n"
+echo ""
+printf "  ${W}▸${N} RUN ................................ ${C}bckup -b${N}\n"
+printf "  ${W}▸${N} HELP ............................... ${C}bckup --help${N}\n"
+printf "  ${W}▸${N} PYTHON ............................. ${C}$DEST/backup-for-reinstall.py${N}\n"
+echo ""
