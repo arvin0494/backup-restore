@@ -33,7 +33,7 @@ cd backup-restore
 bash install.sh
 ```
 
-The installer checks for Rust, offers to install it (rustup or system package manager), builds the binary, and adds the `backup` alias to your shell.
+The installer checks for Rust, offers to install it (rustup or system package manager), builds the binary, and adds the `bckup` alias to your shell.
 
 Or download just the Python script:
 
@@ -53,7 +53,7 @@ curl -O https://raw.githubusercontent.com/arvin0494/backup-restore/main/backup-f
 
 ## Usage
 
-After `install.sh` you can use the `backup` command directly.  
+After `install.sh` you can use the `bckup` command directly.  
 With the Python script use `python3 backup-for-reinstall.py`.
 
 ### Configuration
@@ -72,23 +72,23 @@ Only the keys you specify need to be included — missing keys fall back to the 
 
 ```bash
 # Auto-detect destination
-backup -b
+bckup -b
 
 # Specify destination
-backup -b /path/to/backup
+bckup -b /path/to/backup
 
 # Non-interactive mode
-backup -b -y
+bckup -b -y
 ```
 
 ### Restore
 
 ```bash
 # Interactive restore with fzf (select items to restore)
-backup -r /path/to/backup
+bckup -r /path/to/backup
 
 # Restore everything without prompts
-backup -r /path/to/backup -y
+bckup -r /path/to/backup -y
 ```
 
 ### Interactive menu
@@ -96,7 +96,7 @@ backup -r /path/to/backup -y
 Run without arguments:
 
 ```bash
-backup
+bckup
 ```
 
 ## Notes
