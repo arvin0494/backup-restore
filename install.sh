@@ -112,16 +112,16 @@ shell_aliases() {
 
     local line
     if [[ "${SHELL##*/}" == "fish" ]]; then
-        line="alias backup='$BIN'"
-        if ! grep -sqF "alias backup" "$rc" 2>/dev/null; then
+        line="alias bckup='$BIN'"
+        if ! grep -sqF "alias bckup" "$rc" 2>/dev/null; then
             echo "$line" >> "$rc"
             ok "Alias added to $rc  (run: source $rc)"
         else
             ok "Alias already present in $rc"
         fi
     else
-        line="alias backup='$BIN'"
-        if ! grep -sqF "alias backup=" "$rc" 2>/dev/null; then
+        line="alias bckup='$BIN'"
+        if ! grep -sqF "alias bckup=" "$rc" 2>/dev/null; then
             echo "" >> "$rc"
             echo "# backup-restore" >> "$rc"
             echo "$line" >> "$rc"
