@@ -50,6 +50,18 @@ curl -O https://raw.githubusercontent.com/arvin0494/backup-restore/main/backup-f
 After `install.sh` you can use the `backup` command directly.  
 With the Python script use `python3 backup-for-reinstall.py`.
 
+### Configuration
+
+Create `~/.config/backup-restore/config` to override defaults:
+
+```ini
+BACKUP_BASE=/mnt/HDD4T/BACKUP
+VM_QEMU_SRC=/etc/libvirt/qemu
+VM_IMAGES_SRC=/var/lib/libvirt/images
+```
+
+Only the keys you specify need to be included — missing keys fall back to the built-in defaults above.
+
 ### Backup
 
 ```bash
@@ -83,6 +95,7 @@ backup
 
 ## Notes
 
+- Config file at `~/.config/backup-restore/config` overrides built-in paths
 - `sudo` is required for home backup (permissions, symlinks) and VM data
 - NTFS destination: uses `--inplace` to avoid ENOSPC from ntfs-3g temp files; if ENOSPC occurs, run `sudo ntfsfix /dev/sda1`
 - `.steam` and `.var` are intentionally kept in home backup (user data, not cache)

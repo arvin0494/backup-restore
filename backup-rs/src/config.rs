@@ -1,6 +1,41 @@
-pub const BACKUP_BASE: &str = "/mnt/HDD4T/BACKUP";
+use std::collections::HashMap;
+use std::path::PathBuf;
+
+pub const BACKUP_BASE_DEFAULT: &str = "/mnt/HDD4T/BACKUP";
 pub const VM_QEMU_SRC: &str = "/etc/libvirt/qemu";
 pub const VM_IMAGES_SRC: &str = "/var/lib/libvirt/images";
+
+/// Load user config from `~/.config/backup-restore/config`, return overrides.
+pub fn load_user_config() -> HashMap<String, String> {
+    let mut map = HashMap::new();
+    let path = get_config_path();
+    if !path.exists() {
+        return map;
+    }
+    if let Ok(content) = std::fs::read_to_string(&path) {
+        for line in content.lines() {
+            let line = line.trim();
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
+            if let Some((k, v)) = line.split_once('=') {
+                map.insert(k.trim().to_string(), v.trim().to_string());
+            }
+        }
+    }
+    map
+}
+
+/// Resolved backup base directory — user config overrides compiled-in default.
+pub fn backup_base() -> String {
+    let cfg = load_user_config();
+    cfg.get("BACKUP_BASE").cloned().unwrap_or_else(|| BACKUP_BASE_DEFAULT.to_string())
+}
+
+fn get_config_path() -> PathBuf {
+    let home = std::env::var("HOME").unwrap_or_else(|_| "/root".into());
+    PathBuf::from(home).join(".config").join("backup-restore").join("config")
+}
 
 pub const BROWSERS: &[(&str, &str)] = &[
     (".mozilla", "mozilla"),

@@ -32,10 +32,27 @@ LOG_FILE = None
 # Common exclude patterns shared across backup sections
 _CACHE_EXCLUDES = ["Cache","cache","Caches","Crash Reports","crashpad"]
 
-# Hardcoded paths used across backup/restore
-BACKUP_BASE = "/mnt/HDD4T/BACKUP"
-VM_QEMU_SRC = "/etc/libvirt/qemu"
-VM_IMAGES_SRC = "/var/lib/libvirt/images"
+# ── User config (~/.config/backup-restore/config) ──────────────────────
+def _load_user_config():
+    cfg = {}
+    path = os.path.expanduser("~/.config/backup-restore/config")
+    if os.path.isfile(path):
+        with open(path) as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if "=" in line:
+                    k, _, v = line.partition("=")
+                    cfg[k.strip()] = v.strip()
+    return cfg
+
+_USER_CFG = _load_user_config()
+
+# Hardcoded paths — overridable via ~/.config/backup-restore/config
+BACKUP_BASE = _USER_CFG.get("BACKUP_BASE", "/mnt/HDD4T/BACKUP")
+VM_QEMU_SRC = _USER_CFG.get("VM_QEMU_SRC", "/etc/libvirt/qemu")
+VM_IMAGES_SRC = _USER_CFG.get("VM_IMAGES_SRC", "/var/lib/libvirt/images")
 
 # Browser profile paths: (relative_source_dir_in_home, dest_subdir_name)
 BROWSERS = [

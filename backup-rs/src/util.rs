@@ -120,7 +120,7 @@ pub fn detect_path() -> String {
     } else {
         String::new()
     };
-    format!("{}/{}{}", crate::config::BACKUP_BASE, host, tag)
+    format!("{}/{}{}", crate::config::backup_base(), host, tag)
 }
 
 pub fn detect_checkers(path: &str) -> u32 {
