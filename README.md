@@ -19,6 +19,12 @@ Backup your Linux system before reinstalling, then restore everything after.
 
 ## Get the tool
 
+Quick one-liner:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/arvin0494/backup-restore/main/install.sh | bash
+```
+
 Clone the repo, then run the installer:
 
 ```bash
