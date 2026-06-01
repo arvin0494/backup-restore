@@ -251,6 +251,7 @@ def _backup_home(dest, ck):
                 "snap/",".local/share/flatpak/",".npm/",".cargo/",".rustup/",
                 ".gradle/",".m2/","VirtualBox VMs/",".vagrant.d/",
                 "Cache/","Code Cache/","GPUCache/","Caches/",
+                "Games/",
                 "*~","*.bak","*.swp"]
     hx = " ".join(f"--exclude '{x}'" for x in excludes)
     copy_progress(f"sudo rclone copy ~/ '{home_dest}' --links --inplace {hx}", checkers=ck, ntfs=True)
