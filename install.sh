@@ -168,8 +168,8 @@ create_config
 info "Python version also available at: $DEST/backup-for-reinstall.py"
 cat <<EOF
 
-  ${W}Usage:${N}  backup -b              (backup, auto-detect path)
-          backup -b /path    (backup, custom path)
-          backup -r /path    (restore interactively)
+  ${W}Usage:${N}  bckup -b              (backup, auto-detect path)
+          bckup -b /path    (backup, custom path)
+          bckup -r /path    (restore interactively)
 
 EOF
