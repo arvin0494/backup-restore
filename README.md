@@ -19,12 +19,20 @@ Backup your Linux system before reinstalling, then restore everything after.
 
 ## Get the tool
 
+**One‑liner** (auto‑installs Rust if missing, builds, adds `backup` alias):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/arvin0494/backup-restore/main/install.sh | bash
+```
+
+Or clone manually:
+
 ```bash
 git clone git@github.com:arvin0494/backup-restore.git
 cd backup-restore
 ```
 
-Or download just the script:
+Or download just the Python script:
 
 ```bash
 curl -O https://raw.githubusercontent.com/arvin0494/backup-restore/main/backup-for-reinstall.py
@@ -32,44 +40,48 @@ curl -O https://raw.githubusercontent.com/arvin0494/backup-restore/main/backup-f
 
 ## Dependencies
 
-Auto-installed on first run — supports `pacman`, `apt`, `dnf`, `zypper`, `apk`:
+**Rust version** — auto‑installed by `install.sh`.  
+**Python version** — auto‑installed on first run (pacman, apt, dnf, zypper, apk):
 
-- `rclone` — fast cloud/本地 sync with progress display
+- `rclone` — fast cloud/local sync with progress display
 - `gdu` — parallel disk usage estimation
 - `fzf` — fuzzy multi-select for restore
 - `python-tqdm` — restore progress bar
 
 ## Usage
 
+After `install.sh` you can use the `backup` command directly.  
+With the Python script use `python3 backup-for-reinstall.py`.
+
 ### Backup
 
 ```bash
 # Auto-detect destination
-python3 backup-for-reinstall.py -b
+backup -b
 
 # Specify destination
-python3 backup-for-reinstall.py -b /path/to/backup
+backup -b /path/to/backup
 
 # Non-interactive mode
-python3 backup-for-reinstall.py -b -y
+backup -b -y
 ```
 
 ### Restore
 
 ```bash
 # Interactive restore with fzf (select items to restore)
-python3 backup-for-reinstall.py -r /path/to/backup
+backup -r /path/to/backup
 
 # Restore everything without prompts
-python3 backup-for-reinstall.py -r /path/to/backup -y
+backup -r /path/to/backup -y
 ```
 
 ### Interactive menu
 
-Run without arguments for an interactive menu:
+Run without arguments:
 
 ```bash
-python3 backup-for-reinstall.py
+backup
 ```
 
 ## Notes
