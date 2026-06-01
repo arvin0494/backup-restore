@@ -17,8 +17,16 @@ err()   { printf "  ${R}%s${N}\n" "$*"; }
 
 # ── Ensure Rust is installed ───────────────────────────────
 ensure_rust() {
+    # source rustup env first, in case ~/.cargo/bin isn't on PATH yet
+    [[ -f "$HOME/.cargo/env" ]] && . "$HOME/.cargo/env"
     if command -v rustc &>/dev/null && command -v cargo &>/dev/null; then
         ok "Rust $(rustc --version) already installed."
+        return 0
+    fi
+    # also check ~/.cargo/bin directly
+    if [[ -x "$HOME/.cargo/bin/rustc" && -x "$HOME/.cargo/bin/cargo" ]]; then
+        export PATH="$HOME/.cargo/bin:$PATH"
+        ok "Rust $("$HOME/.cargo/bin/rustc" --version) already installed (added ~/.cargo/bin to PATH)."
         return 0
     fi
     warn "Rust is not installed."
