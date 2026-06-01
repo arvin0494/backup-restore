@@ -19,18 +19,15 @@ Backup your Linux system before reinstalling, then restore everything after.
 
 ## Get the tool
 
-**One‑liner** (auto‑installs Rust if missing, builds, adds `backup` alias):
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/arvin0494/backup-restore/main/install.sh | bash
-```
-
-Or clone manually:
+Clone the repo, then run the installer:
 
 ```bash
 git clone git@github.com:arvin0494/backup-restore.git
 cd backup-restore
+bash install.sh
 ```
+
+The installer checks for Rust, offers to install it (rustup or system package manager), builds the binary, and adds the `backup` alias to your shell.
 
 Or download just the Python script:
 
