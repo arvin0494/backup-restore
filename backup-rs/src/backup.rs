@@ -82,15 +82,18 @@ pub fn backup_config(dest: &str, ck: u32) {
     let cfg_dest = format!("{}/config", dest);
     let _ = std::fs::create_dir_all(&cfg_dest);
 
+    let cfg_size = run_stdout("du -sh ~/.config 2>/dev/null | cut -f1");
+    e(&format!("  {}Config size:{} {}{}{}", C, N, W, cfg_size, N));
+
     let excludes: Vec<String> = CACHE_EXCLUDES.iter()
         .chain(CONFIG_EXCLUDES.iter())
         .map(|x| format!("--exclude '{}'", x))
         .collect();
     let ex = excludes.join(" ");
 
-    e(&format!("  {}Syncing configs...{}", Y, N));
+    e(&format!("  {}Syncing configs (verbose)...{}", Y, N));
     let _ = copy_progress(
-        &format!("rclone copy ~/.config/ '{}/' {}", cfg_dest, ex),
+        &format!("rclone copy ~/.config/ '{}/' --verbose {}", cfg_dest, ex),
         ck, true, true,
     );
 
