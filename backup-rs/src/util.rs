@@ -109,6 +109,7 @@ pub fn copy_progress(
     if ntfs { extra.push_str(" --ignore-errors"); }
     if skip_links { extra.push_str(" --skip-links"); }
     if no_traverse { extra.push_str(" --no-traverse"); }
+    extra.push_str(" --fast-list --dir-cache-time=5m");
     // Use --progress for the live status bar with fast updates
     let full = format!(
         "{} --progress --stats=200ms --checkers {} --transfers {}{}",
