@@ -90,7 +90,7 @@ pub fn copy_progress(
     if skip_links { extra.push_str(" --skip-links"); }
     // --verbose shows each file scrolling, --stats prints periodic summary
     let full = format!(
-        "{} --verbose --stats=200ms --checkers {} --transfers {}{}",
+        "{} --verbose --stats=1s --checkers {} --transfers {}{}",
         base_cmd, checkers, checkers, extra,
     );
 
