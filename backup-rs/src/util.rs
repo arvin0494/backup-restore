@@ -1,4 +1,4 @@
-use std::io::{BufRead, BufReader, Write};
+use std::io::Write;
 use std::process::{Command, Output, Stdio};
 use std::sync::{Mutex, OnceLock};
 use std::thread;
@@ -154,67 +154,6 @@ pub fn copy_progress(
 
     let status = child.wait()?;
     Ok(status.code().unwrap_or(-1))
-}
-
-fn parse_stats_line(line: &str) -> (String, String, String, String) {
-    let line = strip_ansi(line);
-    // "Transferred:   1.234 GiB / 12.345 GiB, 10%, 5 MiB/s, ETA 5m"
-    // or "Checks:         1234 / 412714, 0.3%"
-    let (transferred, pct, speed, eta) = if line.is_empty() {
-        (String::new(), String::new(), String::new(), String::new())
-    } else if line.starts_with("Transferred") {
-        // Parse "Transferred:   X / Y, Z%, W MiB/s, ETA T"
-        let transferred = if let Some(end) = line.find(',') {
-            line[..end].trim().to_string()
-        } else { String::new() };
-        let pct = if let Some(idx) = line.find('%') {
-            let start = line[..idx].rfind(|c: char| !c.is_ascii_digit() && c != '.').map(|i| i+1).unwrap_or(0);
-            line[start..idx].to_string()
-        } else { String::new() };
-        let eta = if let Some(idx) = line.find("ETA") {
-            line[idx+3..].trim().to_string()
-        } else { String::new() };
-        let speed = if let Some(eta_pos) = line.find("ETA") {
-            let before = &line[..eta_pos];
-            if let Some(comma) = before.rfind(',') {
-                before[comma+1..].trim().to_string()
-            } else { String::new() }
-        } else { String::new() };
-        (transferred, pct, speed, eta)
-    } else if line.starts_with("Checks") {
-        // Parse "Checks:   X / Y, Z%"
-        let pct = if let Some(idx) = line.find('%') {
-            let start = line[..idx].rfind(|c: char| !c.is_ascii_digit() && c != '.').map(|i| i+1).unwrap_or(0);
-            line[start..idx].to_string()
-        } else { String::new() };
-        (String::new(), pct, String::new(), String::new())
-    } else if line.starts_with("Listed") {
-        // "Listed: 12345" — show as transferred count
-        let count = line.trim_start_matches("Listed:").trim().to_string();
-        (count, String::new(), String::new(), String::new())
-    } else {
-        (String::new(), String::new(), String::new(), String::new())
-    };
-    (transferred, pct, speed, eta)
-}
-
-fn make_bar(pct: &str, width: usize) -> String {
-    let p = pct.parse::<f64>().unwrap_or(0.0) / 100.0;
-    let filled = (p * width as f64).round() as usize;
-    let filled = filled.min(width);
-    let mut bar = String::with_capacity(width + 2);
-    bar.push('[');
-    for i in 0..width {
-        if i < filled {
-            bar.push('=');
-        } else if i == filled && filled < width {
-            bar.push('>');
-        } else {
-            bar.push('-');
-        }
-    }
-    bar.push(']');
-    bar
 }
 
 pub fn _fmt(size: u64) -> String {
