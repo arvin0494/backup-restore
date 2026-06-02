@@ -123,7 +123,7 @@ clone_repo() {
     echo ""
     if [[ -d "$DEST" ]]; then
         progress 40 "Updating existing clone…"
-        git -C "$DEST" fetch origin "$BRANCH" 2>/dev/null
+        git -C "$DEST" fetch origin "$BRANCH" 2>/dev/null || true
         git -C "$DEST" reset --hard "origin/$BRANCH" 2>/dev/null || true
         progress 100 "Repository updated"
         status "CLONE .............................. " "$DEST"

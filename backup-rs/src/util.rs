@@ -175,13 +175,11 @@ pub fn copy_progress(
             eprint!("{}", display);
             std::io::stderr().flush().ok();
         }
-        // Clear the progress line
-        eprint!("\r{}\r", " ".repeat(80));
         let d = start.elapsed();
         let m = d.as_secs() / 60;
         let s = d.as_secs() % 60;
         let elapsed = if m > 0 { format!("{}m {}s", m, s) } else { format!("{}s", s) };
-        eprintln!("\r{}\r  {}{} complete ({}){}", " ".repeat(80), G, msg, elapsed, N);
+        eprintln!("  {}{} complete ({}){}", G, msg, elapsed, N);
     } else {
         stderr_handle.join().ok();
         let status = child.wait()?;
