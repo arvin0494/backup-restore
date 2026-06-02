@@ -231,4 +231,5 @@ printf "  ${C}╚═════════════════════
 echo ""
 printf "  ${W}▸${N} RUN ................................ ${C}bckup -b${N}\n"
 printf "  ${W}▸${N} HELP ............................... ${C}bckup --help${N}\n"
+printf "  ${W}▸${N} UNINSTALL .......................... ${C}bash $DEST/uninstall.sh${N}\n"
 echo ""

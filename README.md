@@ -90,6 +90,14 @@ Run without arguments:
 bckup
 ```
 
+## Uninstall
+
+```bash
+bash ~/.local/share/backup-restore/uninstall.sh
+```
+
+Or re-run the curl one-liner to reinstall.
+
 ## Notes
 
 - Config file at `~/.config/backup-restore/config` overrides built-in paths
