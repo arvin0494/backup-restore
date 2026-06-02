@@ -111,9 +111,8 @@ pub fn copy_progress(
     if skip_links { extra.push_str(" --skip-links"); }
     if no_traverse { extra.push_str(" --no-traverse"); }
     extra.push_str(" --fast-list --buffer-size=64M");
-    // Use --stats=1s (clean lines, no ANSI escape codes)
     let full = format!(
-        "{} --stats=1s --checkers {} --transfers {}{}",
+        "{} --progress --stats=200ms --checkers {} --transfers {}{}",
         base_cmd, checkers, checkers, extra,
     );
 
@@ -121,78 +120,40 @@ pub fn copy_progress(
         .arg("-c").arg(&full)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
-        .stderr(Stdio::piped())
+        .stderr(Stdio::inherit())
         .current_dir(std::env::temp_dir())
         .spawn()?;
 
-    let stderr = child.stderr.take().unwrap();
-    use std::sync::Mutex;
-    let progress: std::sync::Arc<Mutex<String>> = Default::default();
-    let pclone = progress.clone();
-    let stderr_handle = thread::spawn(move || {
-        let reader = BufReader::new(stderr);
-        for line in reader.lines() {
-            let line = match line { Ok(l) => l, Err(_) => break };
-            if line.contains("Transferred:") || line.contains("Listed:") || (line.contains('%') && line.contains("Checks:")) {
-                *pclone.lock().unwrap() = line;
-            } else if line.contains("Elapsed time:") {
-                // skip
-            } else {
-                eprintln!("{}", line);
-            }
-        }
-    });
-
-    let exit_code;
-
     if let Some(msg) = scan_msg {
         let start = Instant::now();
-        let bar_width: usize = 28;
         loop {
-            thread::sleep(Duration::from_secs(1));
+            thread::sleep(Duration::from_secs(2));
             match child.try_wait()? {
                 Some(status) => {
-                    exit_code = status.code().unwrap_or(-1);
-                    break;
+                    let d = start.elapsed();
+                    let m = d.as_secs() / 60;
+                    let s = d.as_secs() % 60;
+                    let elapsed = if m > 0 { format!("{}m {}s", m, s) } else { format!("{}s", s) };
+                    eprintln!("  {}{} complete ({}){}", G, msg, elapsed, N);
+                    return Ok(status.code().unwrap_or(-1));
                 }
                 None => {}
             }
-            let _ = start.elapsed(); // keep timing for completion message
-            // Parse the latest stats line
-            let stats = progress.lock().unwrap().clone();
-            let (transferred, pct, speed, eta) = parse_stats_line(&stats);
-
-            // Build a progress bar
-            let bar = make_bar(&pct, bar_width);
-
-            // Build the display line
-            let display = if stats.is_empty() {
-                format!("\r  {}{}... listing{}", Y, msg, N)
+            let d = start.elapsed();
+            let secs = d.as_secs();
+            let m = secs / 60;
+            let s = secs % 60;
+            let line = if m > 0 {
+                format!("  {}{}... {}m {}s{}", Y, msg, m, s, N)
             } else {
-                let pct_display = if pct.is_empty() { "-".to_string() } else { pct.clone() };
-                format!(
-                    "\r  {}{:<20} {:>14}  {:>8}  {:>5}  {} {:>3}%{}",
-                    Y, msg, transferred, speed, eta, bar, pct_display, N,
-                )
+                format!("  {}{}... {}s{}", Y, msg, s, N)
             };
-            eprint!("{}", display);
-            std::io::stderr().flush().ok();
+            eprintln!("{}", line);
         }
-        let d = start.elapsed();
-        let m = d.as_secs() / 60;
-        let s = d.as_secs() % 60;
-        let elapsed = if m > 0 { format!("{}m {}s", m, s) } else { format!("{}s", s) };
-        eprintln!("  {}{} complete ({}){}", G, msg, elapsed, N);
-    } else {
-        stderr_handle.join().ok();
-        let status = child.wait()?;
-        exit_code = status.code().unwrap_or(-1);
-        return Ok(exit_code);
     }
 
-    stderr_handle.join().ok();
-    let _ = child.wait(); // already reaped by try_wait
-    Ok(exit_code)
+    let status = child.wait()?;
+    Ok(status.code().unwrap_or(-1))
 }
 
 fn parse_stats_line(line: &str) -> (String, String, String, String) {
