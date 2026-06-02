@@ -132,7 +132,7 @@ pub fn copy_progress(
         let reader = BufReader::new(stderr);
         for line in reader.lines() {
             let line = match line { Ok(l) => l, Err(_) => break };
-            if line.contains("Transferred:") && line.contains('%') {
+            if line.contains('%') && (line.contains("Transferred:") || line.contains("Checks:")) {
                 if let Some(idx) = line.find('%') {
                     let start = line[..idx].rfind(|c: char| !c.is_ascii_digit() && c != '.').map(|i| i+1).unwrap_or(0);
                     if let Some(p) = line[start..idx].split('.').next() {
@@ -149,7 +149,7 @@ pub fn copy_progress(
     if let Some(msg) = scan_msg {
         let start = Instant::now();
         loop {
-            thread::sleep(Duration::from_secs(2));
+            thread::sleep(Duration::from_secs(1));
             match child.try_wait()? {
                 Some(status) => {
                     exit_code = status.code().unwrap_or(-1);
