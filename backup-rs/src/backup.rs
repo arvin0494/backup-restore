@@ -51,6 +51,26 @@ pub fn estimate_home_size() -> u64 {
             .unwrap_or_default();
         total += out.parse::<u64>().unwrap_or(0);
     }
+    // Include extra dirs from config
+    for d in extra_backup_dirs() {
+        if !Path::new(&d).is_dir() { continue; }
+        let name = Path::new(&d).file_name().unwrap_or_default().to_string_lossy().to_string();
+        e(&format!("  {}  {}...{}", Y, name, N));
+        let out = Command::new("sh")
+            .arg("-c")
+            .arg(format!(
+                "gdu -n -s -p --no-prefix --ignore-dirs '{}' '{}' 2>/dev/null | awk '{{print $1}}'",
+                gdu_ignore, d,
+            ))
+            .output()
+            .ok()
+            .and_then(|o| {
+                let s = String::from_utf8_lossy(&o.stdout).trim().to_string();
+                if s.is_empty() { None } else { Some(s) }
+            })
+            .unwrap_or_default();
+        total += out.parse::<u64>().unwrap_or(0);
+    }
     e(&format!("  {}Estimated data size:{} {}{}{}", C, N, W, _fmt(total), N));
     total
 }
@@ -145,6 +165,28 @@ pub fn backup_home(dest: &str, ck: u32) {
     );
 }
 
+pub fn backup_extra(dest: &str, ck: u32) {
+    let dirs = extra_backup_dirs();
+    if dirs.is_empty() { return; }
+    e(&format!("{}--- Backing up extra dirs ---{}", M, N));
+    let extra_dest = format!("{}/extra", dest);
+    let _ = std::fs::create_dir_all(&extra_dest);
+    for src in dirs {
+        let p = Path::new(&src);
+        if !p.is_dir() {
+            e(&format!("  {}  Skipping {} (not found){}", Y, src, N));
+            continue;
+        }
+        let name = p.file_name().unwrap_or_default().to_string_lossy().to_string();
+        let target = format!("{}/{}", extra_dest, name);
+        e(&format!("  {}Backing up {}...{}", Y, name, N));
+        let _ = copy_progress(
+            &format!("rclone copy '{}/' '{}/'", src, target),
+            ck, false, false,
+        );
+    }
+}
+
 pub fn do_backup(dest: &str, auto_yes: bool) -> anyhow::Result<()> {
     let dest = std::path::Path::new(dest);
     let dest_str = dest.to_string_lossy().to_string();
@@ -190,6 +232,7 @@ pub fn do_backup(dest: &str, auto_yes: bool) -> anyhow::Result<()> {
     backup_browsers(&dest_str, ck);
     backup_vm(&dest_str, ck);
     backup_home(&dest_str, ck);
+    backup_extra(&dest_str, ck);
 
     // Summary
     let sz_out = run_stdout(&format!("du -sh '{}' | cut -f1", dest_str));

@@ -55,9 +55,12 @@ Create `~/.config/backup-restore/config` to override defaults:
 BACKUP_BASE=/mnt/HDD4T/BACKUP
 VM_QEMU_SRC=/etc/libvirt/qemu
 VM_IMAGES_SRC=/var/lib/libvirt/images
+BACKUP_EXTRA_DIRS=/path/to/something,/another/path
 ```
 
 Only the keys you specify need to be included — missing keys fall back to the built-in defaults above.
+
+`BACKUP_EXTRA_DIRS` takes a comma-separated list of directories. Each is backed up to `dest/extra/<basename>/` and shown as a separate item in the restore menu.
 
 ### Backup
 

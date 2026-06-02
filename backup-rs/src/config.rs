@@ -32,6 +32,13 @@ pub fn backup_base() -> String {
     cfg.get("BACKUP_BASE").cloned().unwrap_or_else(|| BACKUP_BASE_DEFAULT.to_string())
 }
 
+pub fn extra_backup_dirs() -> Vec<String> {
+    let cfg = load_user_config();
+    cfg.get("BACKUP_EXTRA_DIRS")
+        .map(|s| s.split(',').map(|p| p.trim().to_string()).filter(|p| !p.is_empty()).collect())
+        .unwrap_or_default()
+}
+
 fn get_config_path() -> PathBuf {
     let home = std::env::var("HOME").unwrap_or_else(|_| "/root".into());
     PathBuf::from(home).join(".config").join("backup-restore").join("config")

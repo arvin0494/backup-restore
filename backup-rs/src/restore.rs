@@ -139,6 +139,23 @@ pub fn do_restore(backup_dir: &str, dest_dir: &str, auto: bool) -> anyhow::Resul
         }
     }
 
+    // Extra directories
+    let extra_src = format!("{}/extra", bd);
+    if Path::new(&extra_src).is_dir() {
+        if let Ok(entries) = std::fs::read_dir(&extra_src) {
+            for entry in entries.flatten() {
+                if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+                    let name = entry.file_name().to_string_lossy().to_string();
+                    let (a, b) = (bd.clone(), dd.clone());
+                    let n = name.clone();
+                    items.push((format!("extra-{}", name), format!("Restore extra/{}", name), Some(Box::new(move || {
+                        let _ = run(&format!("rclone copy '{}/extra/{}/' '{}/' --checkers {} 2>/dev/null", a, n, b, ck));
+                    }))));
+                }
+            }
+        }
+    }
+
     if items.is_empty() {
         e(&format!("{}Nothing found to restore in that directory{}", R, N));
         std::process::exit(1);

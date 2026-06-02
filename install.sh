@@ -209,6 +209,7 @@ create_config() {
 BACKUP_BASE=/mnt/HDD4T/BACKUP
 # VM_QEMU_SRC=/etc/libvirt/qemu
 # VM_IMAGES_SRC=/var/lib/libvirt/images
+# BACKUP_EXTRA_DIRS=/path/to/something,/another/path
 EOF
     progress 100 "Config created"
     status "CONFIG .............................. " "$cfg_file"
