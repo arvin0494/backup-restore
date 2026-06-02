@@ -50,7 +50,7 @@ done
 echo ""
 
 # ── Remove binary ─────────────────────────────────────────
-echo "  ${C}── REMOVING BINARY ──${N}"
+printf "  ${C}── REMOVING BINARY ──${N}\n"
 if [[ -f "$BIN" ]]; then
     rm -f "$BIN"
     progress 100 "Binary removed"
@@ -60,7 +60,7 @@ else
 fi
 
 # ── Remove clone ──────────────────────────────────────────
-echo "  ${C}── REMOVING CLONE ──${N}"
+printf "  ${C}── REMOVING CLONE ──${N}\n"
 if [[ -d "$DEST" ]]; then
     rm -rf "$DEST"
     progress 100 "Clone removed"
@@ -70,7 +70,7 @@ else
 fi
 
 # ── Remove config ─────────────────────────────────────────
-echo "  ${C}── REMOVING CONFIG ──${N}"
+printf "  ${C}── REMOVING CONFIG ──${N}\n"
 if [[ -d "$CONFIG_DIR" ]]; then
     rm -rf "$CONFIG_DIR"
     progress 100 "Config removed"
@@ -80,7 +80,7 @@ else
 fi
 
 # ── Remove alias from shell rc ────────────────────────────
-echo "  ${C}── REMOVING SHELL ALIAS ──${N}"
+printf "  ${C}── REMOVING SHELL ALIAS ──${N}\n"
 for rc in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.config/fish/config.fish" "$HOME/.profile"; do
     [[ -f "$rc" ]] || continue
     if grep -sq "alias bckup=" "$rc" 2>/dev/null || grep -sq "alias bckup " "$rc" 2>/dev/null || grep -sq "alias backup=" "$rc" 2>/dev/null; then
