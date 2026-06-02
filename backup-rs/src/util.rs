@@ -113,8 +113,14 @@ pub fn copy_progress(
             if let Some(_) = child.try_wait()? {
                 break;
             }
-            let secs = start.elapsed().as_secs();
-            e(&format!("  {}{}... {}s elapsed{}", Y, msg, secs, N));
+            let d = start.elapsed();
+            let m = d.as_secs() / 60;
+            let s = d.as_secs() % 60;
+            if m > 0 {
+                e(&format!("  {}{}... {}m {}s{}", Y, msg, m, s, N));
+            } else {
+                e(&format!("  {}{}... {}s{}", Y, msg, s, N));
+            }
         }
     }
 
