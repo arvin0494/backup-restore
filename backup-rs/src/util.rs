@@ -103,7 +103,7 @@ pub fn copy_progress(
     ntfs: bool,
     skip_links: bool,
     no_traverse: bool,
-    total_files: u64,
+    _total_files: u64,
     scan_msg: Option<&str>,
 ) -> anyhow::Result<i32> {
     let mut extra = String::new();
@@ -126,6 +126,7 @@ pub fn copy_progress(
 
     if let Some(msg) = scan_msg {
         let start = Instant::now();
+        let mut first = true;
         loop {
             thread::sleep(Duration::from_secs(1));
             if let Some(_) = child.try_wait()? {
@@ -135,20 +136,24 @@ pub fn copy_progress(
             let secs = d.as_secs();
             let m = secs / 60;
             let s = secs % 60;
-            let fps = if total_files > 0 && secs > 0 {
-                format!(" ({} files/s)", total_files / secs)
-            } else {
-                String::new()
-            };
-            let line = if m > 0 {
-                format!("\r  {}{}... {}m {}s{}  {}", Y, msg, m, s, fps, N)
-            } else {
-                format!("\r  {}{}... {}s{}  {}", Y, msg, s, fps, N)
-            };
-            eprint!("{}", line);
-            std::io::stderr().flush().ok();
+            if first {
+                first = false;
+                let line = if m > 0 {
+                    format!("  {}{}... {}m {}s{}", Y, msg, m, s, N)
+                } else {
+                    format!("  {}{}... {}s{}", Y, msg, s, N)
+                };
+                e(&line);
+            }
         }
-        e(&format!("  {}{} complete{}", G, msg, N));
+        let d = start.elapsed();
+        let m = d.as_secs() / 60;
+        let s = d.as_secs() % 60;
+        if m > 0 {
+            e(&format!("  {}{} complete ({}m {}s){}", G, msg, m, s, N));
+        } else {
+            e(&format!("  {}{} complete ({}s){}", G, msg, s, N));
+        }
     }
 
     let status = child.wait()?;
