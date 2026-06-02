@@ -167,7 +167,7 @@ shell_aliases() {
     local line
     if [[ "${SHELL##*/}" == "fish" ]]; then
         line="alias bckup='$BIN'"
-        if ! grep -sqF "alias bckup" "$rc" 2>/dev/null; then
+        if ! grep -sqE "^alias bckup[= ']" "$rc" 2>/dev/null; then
             echo "$line" >> "$rc"
             progress 100 "Alias injected"
             status "SHELL RC ............................ " "$rc"
