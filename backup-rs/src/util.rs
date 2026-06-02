@@ -86,11 +86,13 @@ pub fn copy_progress(
     checkers: u32,
     ntfs: bool,
     skip_links: bool,
+    no_traverse: bool,
     scan_msg: Option<&str>,
 ) -> anyhow::Result<i32> {
     let mut extra = String::new();
     if ntfs { extra.push_str(" --ignore-errors"); }
     if skip_links { extra.push_str(" --skip-links"); }
+    if no_traverse { extra.push_str(" --no-traverse"); }
     // Use --progress for the live status bar with fast updates
     let full = format!(
         "{} --progress --stats=200ms --checkers {} --transfers {}{}",
