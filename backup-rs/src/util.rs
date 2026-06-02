@@ -126,9 +126,8 @@ pub fn copy_progress(
 
     if let Some(msg) = scan_msg {
         let start = Instant::now();
-        let mut first = true;
         loop {
-            thread::sleep(Duration::from_secs(1));
+            thread::sleep(Duration::from_secs(2));
             if let Some(_) = child.try_wait()? {
                 break;
             }
@@ -136,15 +135,12 @@ pub fn copy_progress(
             let secs = d.as_secs();
             let m = secs / 60;
             let s = secs % 60;
-            if first {
-                first = false;
-                let line = if m > 0 {
-                    format!("  {}{}... {}m {}s{}", Y, msg, m, s, N)
-                } else {
-                    format!("  {}{}... {}s{}", Y, msg, s, N)
-                };
-                e(&line);
-            }
+            let line = if m > 0 {
+                format!("  {}{}... {}m {}s{}", Y, msg, m, s, N)
+            } else {
+                format!("  {}{}... {}s{}", Y, msg, s, N)
+            };
+            e(&line);
         }
         let d = start.elapsed();
         let m = d.as_secs() / 60;
