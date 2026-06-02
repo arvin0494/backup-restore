@@ -116,12 +116,16 @@ pub fn copy_progress(
             let d = start.elapsed();
             let m = d.as_secs() / 60;
             let s = d.as_secs() % 60;
-            if m > 0 {
-                e(&format!("  {}{}... {}m {}s{}", Y, msg, m, s, N));
+            let line = if m > 0 {
+                format!("\r  {}{}... {}m {}s  {}", Y, msg, m, s, N)
             } else {
-                e(&format!("  {}{}... {}s{}", Y, msg, s, N));
-            }
+                format!("\r  {}{}... {}s  {}", Y, msg, s, N)
+            };
+            eprint!("{}", line);
+            std::io::stderr().flush().ok();
         }
+        // Final newline
+        e(&format!("  {}{} complete{}", G, msg, N));
     }
 
     let status = child.wait()?;
