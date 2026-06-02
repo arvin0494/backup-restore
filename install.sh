@@ -65,7 +65,7 @@ ensure_rust() {
         return 0
     fi
 
-    echo "  ${C}── INSTALLING RUST ──${N}"
+    printf "  ${C}── INSTALLING RUST ──${N}\n"
     echo ""
     printf "  ${Y}Rust is not installed. Choose method:${N}\n"
     printf "  ${W}  1${N}) rustup (recommended)\n"
@@ -119,7 +119,7 @@ ensure_rust() {
 
 # ── Clone / update repo ────────────────────────────────────
 clone_repo() {
-    echo "  ${C}── DOWNLOADING SOURCE ──${N}"
+    printf "  ${C}── DOWNLOADING SOURCE ──${N}\n"
     echo ""
     if [[ -d "$DEST" ]]; then
         progress 40 "Updating existing clone…"
@@ -140,7 +140,7 @@ clone_repo() {
 
 # ── Build release binary ───────────────────────────────────
 build_binary() {
-    echo "  ${C}── BUILDING BINARY ──${N}"
+    printf "  ${C}── BUILDING BINARY ──${N}\n"
     echo ""
     progress 10 "Compiling (this may take a while)…"
     cargo build --release --manifest-path "$DEST/backup-rs/Cargo.toml" >/dev/null 2>&1
@@ -154,7 +154,7 @@ build_binary() {
 
 # ── Add shell alias ────────────────────────────────────────
 shell_aliases() {
-    echo "  ${C}── INJECTING SHELL ALIAS ──${N}"
+    printf "  ${C}── INJECTING SHELL ALIAS ──${N}\n"
     echo ""
     local rc
     case "${SHELL##*/}" in
@@ -192,7 +192,7 @@ shell_aliases() {
 
 # ── Create default config ─────────────────────────────────
 create_config() {
-    echo "  ${C}── INITIALIZING CONFIG ──${N}"
+    printf "  ${C}── INITIALIZING CONFIG ──${N}\n"
     echo ""
     local cfg_dir="$HOME/.config/backup-restore"
     local cfg_file="$cfg_dir/config"
