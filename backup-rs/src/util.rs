@@ -108,7 +108,7 @@ pub fn copy_progress(
     if no_traverse { extra.push_str(" --no-traverse"); }
     extra.push_str(" --fast-list --buffer-size=64M");
     let full = format!(
-        "{} --stats=1s --checkers {} --transfers {}{}",
+        "{} --progress --checkers {} --transfers {}{}",
         base_cmd, checkers, checkers, extra,
     );
 
