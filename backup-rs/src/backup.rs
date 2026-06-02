@@ -4,7 +4,6 @@ use std::io::Write;
 use std::path::Path;
 use std::process::Command;
 use std::thread;
-use std::time::Instant;
 
 pub fn save_package_lists(dest: &str) {
     e(&format!("{}--- Saving package lists ---{}", M, N));
@@ -95,7 +94,7 @@ pub fn backup_config(dest: &str, ck: u32) {
     e(&format!("  {}Syncing configs...{}", Y, N));
     let _ = copy_progress(
         &format!("rclone copy ~/.config/ '{}/' {}", cfg_dest, ex),
-        ck, true, true,
+        ck, true, true, None,
     );
 
     let home = crate::HOME.get().unwrap();
@@ -126,7 +125,7 @@ pub fn backup_browsers(dest: &str, ck: u32) {
             e(&format!("  {}Backing up {}...{}", Y, name, N));
             let _ = copy_progress(
                 &format!("rclone copy '{}/' '{}/{}/' {}", src, b_dest, name, bx),
-                ck, true, true,
+                ck, true, true, None,
             );
         }
     }
@@ -147,7 +146,7 @@ pub fn backup_vm(dest: &str, ck: u32) {
         e(&format!("  {}Syncing...{}", Y, N));
         let _ = copy_progress(
             &format!("sudo rclone copy '{}/' '{}/images/' --inplace", VM_IMAGES_SRC, vm_dest),
-            ck, true, false,
+            ck, true, false, None,
         );
     }
 }
@@ -156,7 +155,7 @@ pub fn backup_home(dest: &str, ck: u32) {
     e(&format!("{}--- Backing up home data ---{}", M, N));
     e(&format!("  {}Source:{} ~/ (full home, excluded: .cache, node_modules, etc.)", C, N));
     e(&format!("  {}Target:{} {}/home", C, N, dest));
-    e(&format!("  {}Scanning home directory (may take a minute)...{}", Y, N));
+    e(&format!("  {}Scanning home directory...{}", Y, N));
     let home_dest = format!("{}/home", dest);
     let _ = std::fs::create_dir_all(&home_dest);
 
@@ -164,19 +163,10 @@ pub fn backup_home(dest: &str, ck: u32) {
         .map(|x| format!("--exclude '{}'", x))
         .collect();
     let hx = hx.join(" ");
-    let start = Instant::now();
     let _ = copy_progress(
         &format!("sudo rclone copy ~/ '{}' --links --inplace {}", home_dest, hx),
-        ck, false, false,
+        ck, false, false, Some("Scanning home"),
     );
-    let elapsed = start.elapsed();
-    let mins = elapsed.as_secs() / 60;
-    let secs = elapsed.as_secs() % 60;
-    if mins > 0 {
-        e(&format!("  {}Home backup completed in {}m {}s{}", C, mins, secs, N));
-    } else {
-        e(&format!("  {}Home backup completed in {}s{}", C, secs, N));
-    }
 }
 
 pub fn backup_extra(dest: &str, ck: u32) {
@@ -196,7 +186,7 @@ pub fn backup_extra(dest: &str, ck: u32) {
         e(&format!("  {}Backing up {}...{}", Y, name, N));
         let _ = copy_progress(
             &format!("rclone copy '{}/' '{}/'", src, target),
-            ck, false, false,
+            ck, false, false, None,
         );
     }
 }

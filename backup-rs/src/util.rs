@@ -1,6 +1,8 @@
 use std::io::Write;
 use std::process::{Command, Output, Stdio};
 use std::sync::{Mutex, OnceLock};
+use std::thread;
+use std::time::{Duration, Instant};
 
 /// Global log file path, set at backup start.
 pub static LOG_FILE: OnceLock<Mutex<String>> = OnceLock::new();
@@ -84,6 +86,7 @@ pub fn copy_progress(
     checkers: u32,
     ntfs: bool,
     skip_links: bool,
+    scan_msg: Option<&str>,
 ) -> anyhow::Result<i32> {
     let mut extra = String::new();
     if ntfs { extra.push_str(" --ignore-errors"); }
@@ -100,6 +103,18 @@ pub fn copy_progress(
         .stdout(Stdio::null())
         .stderr(Stdio::inherit())
         .spawn()?;
+
+    if let Some(msg) = scan_msg {
+        let start = Instant::now();
+        loop {
+            thread::sleep(Duration::from_secs(5));
+            if let Some(_) = child.try_wait()? {
+                break;
+            }
+            let secs = start.elapsed().as_secs();
+            e(&format!("  {}{}... {}s elapsed{}", Y, msg, secs, N));
+        }
+    }
 
     let status = child.wait()?;
     Ok(status.code().unwrap_or(-1))
