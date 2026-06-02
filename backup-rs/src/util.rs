@@ -88,30 +88,10 @@ pub fn copy_progress(
     let mut extra = String::new();
     if ntfs { extra.push_str(" --ignore-errors"); }
     if skip_links { extra.push_str(" --skip-links"); }
-    // Use --stats=200ms so the progress bar updates rapidly during scanning phase
+    // Use --progress for the live bar + --verbose so files scroll above it
     let full = format!(
-        "{} --progress --stats=200ms --checkers {} --transfers {}{}",
+        "{} --progress --verbose --stats=200ms --checkers {} --transfers {}{}",
         base_cmd, checkers, checkers, extra,
-    );
-
-    let mut child = Command::new("sh")
-        .arg("-c").arg(&full)
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::inherit())
-        .spawn()?;
-
-    let status = child.wait()?;
-    Ok(status.code().unwrap_or(-1))
-}
-
-pub fn copy_progress_verbose(
-    base_cmd: &str,
-    checkers: u32,
-) -> anyhow::Result<i32> {
-    let full = format!(
-        "{} --verbose --stats=200ms --checkers {} --transfers {}",
-        base_cmd, checkers, checkers,
     );
 
     let mut child = Command::new("sh")
