@@ -1,4 +1,4 @@
-use std::io::Write;
+use std::io::{BufRead, BufReader, Write};
 use std::process::{Command, Output, Stdio};
 use std::sync::{Mutex, OnceLock};
 use std::thread;
@@ -111,9 +111,9 @@ pub fn copy_progress(
     if skip_links { extra.push_str(" --skip-links"); }
     if no_traverse { extra.push_str(" --no-traverse"); }
     extra.push_str(" --fast-list --buffer-size=64M");
-    // Use --progress for the live status bar with fast updates
+    // Use --stats=1s (no --progress) so output is clean parseable lines
     let full = format!(
-        "{} --progress --stats=200ms --checkers {} --transfers {}{}",
+        "{} --stats=1s --checkers {} --transfers {}{}",
         base_cmd, checkers, checkers, extra,
     );
 
@@ -121,24 +121,52 @@ pub fn copy_progress(
         .arg("-c").arg(&full)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
-        .stderr(Stdio::inherit())
+        .stderr(Stdio::piped())
         .spawn()?;
+
+    // Read stderr, parse percentage from "Transferred:" lines
+    let stderr = child.stderr.take().unwrap();
+    let pct: std::sync::Arc<std::sync::Mutex<String>> = Default::default();
+    let pct_clone = pct.clone();
+    let stderr_handle = thread::spawn(move || {
+        let reader = BufReader::new(stderr);
+        for line in reader.lines() {
+            let line = match line { Ok(l) => l, Err(_) => break };
+            if line.contains("Transferred:") && line.contains('%') {
+                if let Some(idx) = line.find('%') {
+                    let start = line[..idx].rfind(|c: char| !c.is_ascii_digit() && c != '.').map(|i| i+1).unwrap_or(0);
+                    if let Some(p) = line[start..idx].split('.').next() {
+                        *pct_clone.lock().unwrap() = p.to_string();
+                    }
+                }
+            }
+            eprintln!("{}", line);
+        }
+    });
+
+    let exit_code;
 
     if let Some(msg) = scan_msg {
         let start = Instant::now();
         loop {
             thread::sleep(Duration::from_secs(2));
-            if let Some(_) = child.try_wait()? {
-                break;
+            match child.try_wait()? {
+                Some(status) => {
+                    exit_code = status.code().unwrap_or(-1);
+                    break;
+                }
+                None => {}
             }
             let d = start.elapsed();
             let secs = d.as_secs();
             let m = secs / 60;
             let s = secs % 60;
+            let p = pct.lock().unwrap().clone();
+            let pct_str = if p.is_empty() { String::new() } else { format!(" {}%", p) };
             let line = if m > 0 {
-                format!("  {}{}... {}m {}s{}", Y, msg, m, s, N)
+                format!("  {}{}... {}m {}s{}{}", Y, msg, m, s, pct_str, N)
             } else {
-                format!("  {}{}... {}s{}", Y, msg, s, N)
+                format!("  {}{}... {}s{}{}", Y, msg, s, pct_str, N)
             };
             e(&line);
         }
@@ -150,10 +178,14 @@ pub fn copy_progress(
         } else {
             e(&format!("  {}{} complete ({}s){}", G, msg, s, N));
         }
+    } else {
+        // No timer — just wait
+        let status = child.wait()?;
+        exit_code = status.code().unwrap_or(-1);
     }
 
-    let status = child.wait()?;
-    Ok(status.code().unwrap_or(-1))
+    stderr_handle.join().ok();
+    Ok(exit_code)
 }
 
 pub fn _fmt(size: u64) -> String {
