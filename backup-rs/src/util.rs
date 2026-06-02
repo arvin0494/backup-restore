@@ -79,22 +79,6 @@ pub fn run_stdout(cmd: &str) -> String {
         .unwrap_or_default()
 }
 
-pub fn count_files(path: &str) -> u64 {
-    let out = Command::new("sh")
-        .arg("-c")
-        .arg(format!("find '{}' -xdev -type f 2>/dev/null | wc -l", path))
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .output()
-        .ok()
-        .and_then(|o| {
-            let s = String::from_utf8_lossy(&o.stdout).trim().to_string();
-            if s.is_empty() { None } else { Some(s) }
-        })
-        .unwrap_or_default();
-    out.parse().unwrap_or(0)
-}
-
 pub fn copy_progress(
     base_cmd: &str,
     checkers: u32,
@@ -123,7 +107,7 @@ pub fn copy_progress(
     Ok(status.code().unwrap_or(-1))
 }
 
-pub fn _fmt(size: u64) -> String {
+pub fn fmt(size: u64) -> String {
     // Try numfmt first
     let out = run_stdout(&format!("numfmt --to=iec {}", size));
     if !out.is_empty() { return out; }

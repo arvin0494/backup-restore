@@ -5,22 +5,37 @@ use std::path::Path;
 use std::process::Command;
 use std::thread;
 
+pub fn gdu_size(path: &str, ignore: &str) -> u64 {
+    Command::new("sh")
+        .arg("-c")
+        .arg(format!(
+            "gdu -n -s -p --no-prefix --ignore-dirs '{}' '{}' 2>/dev/null | awk '{{print $1}}'",
+            ignore, path,
+        ))
+        .output().ok()
+        .and_then(|o| {
+            let s = String::from_utf8_lossy(&o.stdout).trim().to_string();
+            if s.is_empty() { None } else { Some(s) }
+        })
+        .unwrap_or_default()
+        .parse::<u64>().unwrap_or(0)
+}
+
 pub fn save_package_lists(dest: &str) {
     e(&format!("{}--- Saving package lists ---{}", M, N));
-    // Arch
-    let _ = run(&format!("pacman -Qqen > '{}/packages-pacman-official.txt' 2>/dev/null", dest));
-    let _ = run(&format!("pacman -Qqem > '{}/packages-aur.txt' 2>/dev/null", dest));
-    // Debian / Ubuntu
-    let _ = run(&format!("dpkg --get-selections > '{}/packages-dpkg.txt' 2>/dev/null", dest));
-    // Fedora
-    let _ = run(&format!("dnf list installed 2>/dev/null | tail -n +2 | awk '{{print \\$1}}' > '{}/packages-dnf.txt'", dest));
-    // openSUSE
-    let _ = run(&format!("zypper se --installed-only -s 2>/dev/null | tail -n +5 | awk '{{print \\$3}}' > '{}/packages-zypper.txt'", dest));
-    // Alpine
-    let _ = run(&format!("apk info > '{}/packages-apk.txt' 2>/dev/null", dest));
-    // Cross-platform
-    let _ = run(&format!("flatpak list --app --columns=application > '{}/flatpak-list.txt' 2>/dev/null", dest));
-    let _ = run(&format!("snap list > '{}/snap-list.txt' 2>/dev/null", dest));
+    let commands = [
+        ("pacman -Qqen", "packages-pacman-official.txt"),
+        ("pacman -Qqem", "packages-aur.txt"),
+        ("dpkg --get-selections", "packages-dpkg.txt"),
+        (r"dnf list installed 2>/dev/null | tail -n +2 | awk '{print $1}'", "packages-dnf.txt"),
+        (r"zypper se --installed-only -s 2>/dev/null | tail -n +5 | awk '{print $3}'", "packages-zypper.txt"),
+        ("apk info", "packages-apk.txt"),
+        ("flatpak list --app --columns=application", "flatpak-list.txt"),
+        ("snap list", "snap-list.txt"),
+    ];
+    for (cmd, filename) in commands {
+        let _ = run(&format!("{} > '{}/{}' 2>/dev/null", cmd, dest, filename));
+    }
 }
 
 pub fn estimate_home_size() -> u64 {
@@ -36,42 +51,15 @@ pub fn estimate_home_size() -> u64 {
         let p = format!("{}/{}", crate::HOME.get().unwrap(), d);
         if !Path::new(&p).is_dir() { continue; }
         e(&format!("  {}  {}...{}", Y, d, N));
-        let out = Command::new("sh")
-            .arg("-c")
-            .arg(format!(
-                "gdu -n -s -p --no-prefix --ignore-dirs '{}' '{}' 2>/dev/null | awk '{{print $1}}'",
-                gdu_ignore, p,
-            ))
-            .output()
-            .ok()
-            .and_then(|o| {
-                let s = String::from_utf8_lossy(&o.stdout).trim().to_string();
-                if s.is_empty() { None } else { Some(s) }
-            })
-            .unwrap_or_default();
-        total += out.parse::<u64>().unwrap_or(0);
+        total += gdu_size(&p, &gdu_ignore);
     }
-    // Include extra dirs from config
     for d in extra_backup_dirs() {
         if !Path::new(&d).is_dir() { continue; }
         let name = Path::new(&d).file_name().unwrap_or_default().to_string_lossy().to_string();
         e(&format!("  {}  {}...{}", Y, name, N));
-        let out = Command::new("sh")
-            .arg("-c")
-            .arg(format!(
-                "gdu -n -s -p --no-prefix --ignore-dirs '{}' '{}' 2>/dev/null | awk '{{print $1}}'",
-                gdu_ignore, d,
-            ))
-            .output()
-            .ok()
-            .and_then(|o| {
-                let s = String::from_utf8_lossy(&o.stdout).trim().to_string();
-                if s.is_empty() { None } else { Some(s) }
-            })
-            .unwrap_or_default();
-        total += out.parse::<u64>().unwrap_or(0);
+        total += gdu_size(&d, &gdu_ignore);
     }
-    e(&format!("  {}Estimated data size:{} {}{}{}", C, N, W, _fmt(total), N));
+    e(&format!("  {}Estimated data size:{} {}{}{}", C, N, W, fmt(total), N));
     total
 }
 
@@ -123,7 +111,6 @@ pub fn backup_browsers(dest: &str, ck: u32) {
         let src = format!("{}/{}", home, src_rel);
         if Path::new(&src).is_dir() {
             e(&format!("  {}Backing up {}...{}", Y, name, N));
-            let _sm = format!("{} browser", name);
             let _ = copy_progress(
                 &format!("rclone copy '{}/' '{}/{}/' {}", src, b_dest, name, bx),
                 ck, true, true, false,
@@ -145,7 +132,6 @@ pub fn backup_vm(dest: &str, ck: u32) {
         let imgsz = run_stdout(&format!("sudo du -sh '{}' | cut -f1", VM_IMAGES_SRC));
         e(&format!("  {}VM disk images:{} {}{}{}", C, N, W, imgsz, N));
         e(&format!("  {}Syncing...{}", Y, N));
-        let _fc = count_files(VM_IMAGES_SRC);
         let _ = copy_progress(
             &format!("sudo rclone copy '{}/' '{}/images/' --inplace", VM_IMAGES_SRC, vm_dest),
             ck, true, false, true,
@@ -157,9 +143,7 @@ pub fn backup_home(dest: &str, ck: u32) {
     e(&format!("{}--- Backing up home data ---{}", M, N));
     e(&format!("  {}Source:{} ~/ (full home, excluded: .cache, node_modules, etc.)", C, N));
     e(&format!("  {}Target:{} {}/home", C, N, dest));
-    e(&format!("  {}Counting files...{}", Y, N));
-    let fc = count_files(&format!("{}/", crate::HOME.get().unwrap()));
-    e(&format!("  {}Scanning home directory...{} ({} files)", Y, N, fc));
+    e(&format!("  {}Scanning home directory...{}", Y, N));
     let home_dest = format!("{}/home", dest);
     let _ = std::fs::create_dir_all(&home_dest);
 
@@ -187,7 +171,6 @@ pub fn backup_extra(dest: &str, ck: u32) {
         }
         let name = p.file_name().unwrap_or_default().to_string_lossy().to_string();
         let target = format!("{}/{}", extra_dest, name);
-        let _sm = format!("Extra: {}", name);
         e(&format!("  {}Backing up {}...{}", Y, name, N));
         let _ = copy_progress(
             &format!("rclone copy '{}/' '{}/'", src, target),
