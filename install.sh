@@ -233,4 +233,7 @@ echo ""
 printf "  ${W}▸${N} RUN ................................ ${C}bckup -b${N}\n"
 printf "  ${W}▸${N} HELP ............................... ${C}bckup --help${N}\n"
 printf "  ${W}▸${N} UNINSTALL .......................... ${C}bash $DEST/uninstall.sh${N}\n"
+
+VERSION=$(grep -oP '(?<=^version = ").*(?=")' "$DEST/backup-rs/Cargo.toml" 2>/dev/null || echo "dev")
+printf "  ${W}▸${N} VERSION ............................ ${C}v${VERSION}${N}\n"
 echo ""

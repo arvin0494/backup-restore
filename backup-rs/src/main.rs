@@ -14,7 +14,7 @@ fn main() -> anyhow::Result<()> {
     use clap::Parser;
 
     #[derive(Parser)]
-    #[command(name = "backup", about = "Backup & restore for Linux reinstall")]
+    #[command(name = "backup", version, about = "Backup & restore for Linux reinstall")]
     struct Cli {
         /// Backup to DIR (auto-detect if no value)
         #[arg(short = 'b', long = "backup")]
