@@ -73,6 +73,7 @@ pub const CONFIG_EXCLUDES: &[&str] = &[
     // Large app data
     "Code/", "Code - OSS/", "VSCodium/",
     "discord/", "Slack/", "spotify/",
+    "vesktop/", "Vesktop/",
 ];
 
 pub const BROWSER_EXCLUDES: &[&str] = &[
