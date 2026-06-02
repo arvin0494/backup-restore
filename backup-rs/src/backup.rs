@@ -93,7 +93,7 @@ pub fn backup_config(dest: &str, ck: u32) {
 
     e(&format!("  {}Syncing configs...{}", Y, N));
     let _ = copy_progress(
-        &format!("rclone copy ~/.config/ '{}/' {}", cfg_dest, ex),
+        &format!("rclone copy ~/.config/ '{}/' --verbose {}", cfg_dest, ex),
         ck, true, true,
     );
 
