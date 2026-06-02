@@ -82,10 +82,11 @@ pub fn run_stdout(cmd: &str) -> String {
 }
 
 pub fn count_files(path: &str) -> u64 {
-    // Use maxdepth 4 for a fast estimate
     let out = Command::new("sh")
         .arg("-c")
-        .arg(format!("find '{}' -maxdepth 4 -xdev -type f 2>/dev/null | wc -l", path))
+        .arg(format!("find '{}' -xdev -type f 2>/dev/null | wc -l", path))
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
         .output()
         .ok()
         .and_then(|o| {
