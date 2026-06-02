@@ -1,4 +1,4 @@
-use std::io::Write;
+use std::io::{BufRead, BufReader, Write};
 use std::process::{Command, Output, Stdio};
 use std::sync::{Mutex, OnceLock};
 use std::thread;
@@ -111,8 +111,9 @@ pub fn copy_progress(
     if skip_links { extra.push_str(" --skip-links"); }
     if no_traverse { extra.push_str(" --no-traverse"); }
     extra.push_str(" --fast-list --buffer-size=64M");
+    // Use --stats=1s (clean lines, no ANSI escape codes)
     let full = format!(
-        "{} --progress --stats=200ms --checkers {} --transfers {}{}",
+        "{} --stats=1s --checkers {} --transfers {}{}",
         base_cmd, checkers, checkers, extra,
     );
 
@@ -120,39 +121,134 @@ pub fn copy_progress(
         .arg("-c").arg(&full)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
-        .stderr(Stdio::inherit())
+        .stderr(Stdio::piped())
         .spawn()?;
+
+    let stderr = child.stderr.take().unwrap();
+    use std::sync::Mutex;
+    let progress: std::sync::Arc<Mutex<String>> = Default::default();
+    let pclone = progress.clone();
+    let stderr_handle = thread::spawn(move || {
+        let reader = BufReader::new(stderr);
+        for line in reader.lines() {
+            let line = match line { Ok(l) => l, Err(_) => break };
+            // Stats lines from --stats=1s contain "Transferred:" or "Checks:"
+            if line.contains("Transferred:") || (line.contains('%') && line.contains("Checks:")) {
+                *pclone.lock().unwrap() = line;
+            } else if line.contains("Elapsed time:") {
+                // skip
+            } else {
+                // NOTICE/ERROR/other — forward to terminal
+                eprintln!("{}", line);
+            }
+        }
+    });
+
+    let exit_code;
 
     if let Some(msg) = scan_msg {
         let start = Instant::now();
+        let bar_width: usize = 28;
         loop {
-            thread::sleep(Duration::from_secs(2));
+            thread::sleep(Duration::from_secs(1));
             match child.try_wait()? {
                 Some(status) => {
-                    let d = start.elapsed();
-                    let m = d.as_secs() / 60;
-                    let s = d.as_secs() % 60;
-                    let elapsed = if m > 0 { format!("{}m {}s", m, s) } else { format!("{}s", s) };
-                    e(&format!("  {}{} complete ({}){}", G, msg, elapsed, N));
-                    return Ok(status.code().unwrap_or(-1));
+                    exit_code = status.code().unwrap_or(-1);
+                    break;
                 }
                 None => {}
             }
-            let d = start.elapsed();
-            let secs = d.as_secs();
-            let m = secs / 60;
-            let s = secs % 60;
-            let line = if m > 0 {
-                format!("  {}{}... {}m {}s{}", Y, msg, m, s, N)
-            } else {
-                format!("  {}{}... {}s{}", Y, msg, s, N)
-            };
-            e(&line);
+            let _ = start.elapsed(); // keep timing for completion message
+            // Parse the latest stats line
+            let stats = progress.lock().unwrap().clone();
+            let (transferred, pct, speed, eta) = parse_stats_line(&stats);
+
+            // Build a progress bar
+            let bar = make_bar(&pct, bar_width);
+
+            // Build the display line like: {msg} {transferred} {speed} {eta} [{bar}] {pct}%
+            let pct_display = if pct.is_empty() { "-".to_string() } else { pct.clone() };
+            let display = format!(
+                "\r  {}{:<20} {:>14}  {:>8}  {:>5}  {} {:>3}%{}",
+                Y, msg, transferred, speed, eta, bar, pct_display, N,
+            );
+            eprint!("{}", display);
+            std::io::stderr().flush().ok();
         }
+        // Clear the progress line
+        eprint!("\r{}\r", " ".repeat(80));
+        let d = start.elapsed();
+        let m = d.as_secs() / 60;
+        let s = d.as_secs() % 60;
+        let elapsed = if m > 0 { format!("{}m {}s", m, s) } else { format!("{}s", s) };
+        eprintln!("\r{}\r  {}{} complete ({}){}", " ".repeat(80), G, msg, elapsed, N);
+    } else {
+        stderr_handle.join().ok();
+        let status = child.wait()?;
+        exit_code = status.code().unwrap_or(-1);
+        return Ok(exit_code);
     }
 
-    let status = child.wait()?;
-    Ok(status.code().unwrap_or(-1))
+    stderr_handle.join().ok();
+    let _ = child.wait(); // already reaped by try_wait
+    Ok(exit_code)
+}
+
+fn parse_stats_line(line: &str) -> (String, String, String, String) {
+    let line = strip_ansi(line);
+    // "Transferred:   1.234 GiB / 12.345 GiB, 10%, 5 MiB/s, ETA 5m"
+    // or "Checks:         1234 / 412714, 0.3%"
+    let (transferred, pct, speed, eta) = if line.is_empty() {
+        (String::new(), String::new(), String::new(), String::new())
+    } else if line.starts_with("Transferred") {
+        // Parse "Transferred:   X / Y, Z%, W MiB/s, ETA T"
+        let transferred = if let Some(end) = line.find(',') {
+            line[..end].trim().to_string()
+        } else { String::new() };
+        let pct = if let Some(idx) = line.find('%') {
+            let start = line[..idx].rfind(|c: char| !c.is_ascii_digit() && c != '.').map(|i| i+1).unwrap_or(0);
+            line[start..idx].to_string()
+        } else { String::new() };
+        let eta = if let Some(idx) = line.find("ETA") {
+            line[idx+3..].trim().to_string()
+        } else { String::new() };
+        let speed = if let Some(eta_pos) = line.find("ETA") {
+            let before = &line[..eta_pos];
+            if let Some(comma) = before.rfind(',') {
+                before[comma+1..].trim().to_string()
+            } else { String::new() }
+        } else { String::new() };
+        (transferred, pct, speed, eta)
+    } else if line.starts_with("Checks") {
+        // Parse "Checks:   X / Y, Z%"
+        let pct = if let Some(idx) = line.find('%') {
+            let start = line[..idx].rfind(|c: char| !c.is_ascii_digit() && c != '.').map(|i| i+1).unwrap_or(0);
+            line[start..idx].to_string()
+        } else { String::new() };
+        (String::new(), pct, String::new(), String::new())
+    } else {
+        (String::new(), String::new(), String::new(), String::new())
+    };
+    (transferred, pct, speed, eta)
+}
+
+fn make_bar(pct: &str, width: usize) -> String {
+    let p = pct.parse::<f64>().unwrap_or(0.0) / 100.0;
+    let filled = (p * width as f64).round() as usize;
+    let filled = filled.min(width);
+    let mut bar = String::with_capacity(width + 2);
+    bar.push('[');
+    for i in 0..width {
+        if i < filled {
+            bar.push('=');
+        } else if i == filled && filled < width {
+            bar.push('>');
+        } else {
+            bar.push('-');
+        }
+    }
+    bar.push(']');
+    bar
 }
 
 pub fn _fmt(size: u64) -> String {
