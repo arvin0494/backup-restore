@@ -94,7 +94,7 @@ pub fn backup_config(dest: &str, ck: u32) {
     e(&format!("  {}Syncing configs...{}", Y, N));
     let _ = copy_progress(
         &format!("rclone copy ~/.config/ '{}/' {}", cfg_dest, ex),
-        ck, true, true, false, None,
+        ck, true, true, false, Some("Configs"),
     );
 
     let home = crate::HOME.get().unwrap();
@@ -123,9 +123,10 @@ pub fn backup_browsers(dest: &str, ck: u32) {
         let src = format!("{}/{}", home, src_rel);
         if Path::new(&src).is_dir() {
             e(&format!("  {}Backing up {}...{}", Y, name, N));
+            let sm = format!("{} browser", name);
             let _ = copy_progress(
                 &format!("rclone copy '{}/' '{}/{}/' {}", src, b_dest, name, bx),
-                ck, true, true, false, None,
+                ck, true, true, false, Some(&sm),
             );
         }
     }
@@ -146,7 +147,7 @@ pub fn backup_vm(dest: &str, ck: u32) {
         e(&format!("  {}Syncing...{}", Y, N));
         let _ = copy_progress(
             &format!("sudo rclone copy '{}/' '{}/images/' --inplace", VM_IMAGES_SRC, vm_dest),
-            ck, true, false, true, None,
+            ck, true, false, true, Some("VM images"),
         );
     }
 }
@@ -183,10 +184,11 @@ pub fn backup_extra(dest: &str, ck: u32) {
         }
         let name = p.file_name().unwrap_or_default().to_string_lossy().to_string();
         let target = format!("{}/{}", extra_dest, name);
+        let sm = format!("Extra: {}", name);
         e(&format!("  {}Backing up {}...{}", Y, name, N));
         let _ = copy_progress(
             &format!("rclone copy '{}/' '{}/'", src, target),
-            ck, false, false, true, None,
+            ck, false, false, true, Some(&sm),
         );
     }
 }
