@@ -115,7 +115,7 @@ pub fn copy_progress(
     let status = Command::new("sh")
         .arg("-c").arg(&full)
         .stdin(Stdio::null())
-        .stdout(Stdio::null())
+        .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
         .current_dir(std::env::temp_dir())
         .status()?;
