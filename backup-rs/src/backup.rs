@@ -4,6 +4,7 @@ use std::io::Write;
 use std::path::Path;
 use std::process::Command;
 use std::thread;
+use std::time::Instant;
 
 pub fn save_package_lists(dest: &str) {
     e(&format!("{}--- Saving package lists ---{}", M, N));
@@ -155,7 +156,7 @@ pub fn backup_home(dest: &str, ck: u32) {
     e(&format!("{}--- Backing up home data ---{}", M, N));
     e(&format!("  {}Source:{} ~/ (full home, excluded: .cache, node_modules, etc.)", C, N));
     e(&format!("  {}Target:{} {}/home", C, N, dest));
-    e(&format!("  {}Scanning home directory (this may take a minute)...{}", Y, N));
+    e(&format!("  {}Scanning home directory (may take a minute)...{}", Y, N));
     let home_dest = format!("{}/home", dest);
     let _ = std::fs::create_dir_all(&home_dest);
 
@@ -163,10 +164,19 @@ pub fn backup_home(dest: &str, ck: u32) {
         .map(|x| format!("--exclude '{}'", x))
         .collect();
     let hx = hx.join(" ");
+    let start = Instant::now();
     let _ = copy_progress(
         &format!("sudo rclone copy ~/ '{}' --links --inplace {}", home_dest, hx),
         ck, false, false,
     );
+    let elapsed = start.elapsed();
+    let mins = elapsed.as_secs() / 60;
+    let secs = elapsed.as_secs() % 60;
+    if mins > 0 {
+        e(&format!("  {}Home backup completed in {}m {}s{}", C, mins, secs, N));
+    } else {
+        e(&format!("  {}Home backup completed in {}s{}", C, secs, N));
+    }
 }
 
 pub fn backup_extra(dest: &str, ck: u32) {
