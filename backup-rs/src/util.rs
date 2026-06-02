@@ -142,16 +142,16 @@ pub fn detect_checkers(path: &str) -> u32 {
 }
 
 pub fn install_deps() -> bool {
-    let (pm, pkgs) = if run_ok("which pacman") {
-        ("sudo pacman -S --noconfirm", vec!["rclone", "gdu", "fzf", "python-tqdm"])
+    let (pm, pkgs): (&str, Vec<&str>) = if run_ok("which pacman") {
+        ("sudo pacman -S --noconfirm", vec!["rclone", "gdu", "fzf"])
     } else if run_ok("which apt-get") {
-        ("sudo apt-get install -y", vec!["rclone", "gdu", "fzf", "python3-tqdm"])
+        ("sudo apt-get install -y", vec!["rclone", "gdu", "fzf"])
     } else if run_ok("which dnf") {
-        ("sudo dnf install -y", vec!["rclone", "gdu", "fzf", "python3-tqdm"])
+        ("sudo dnf install -y", vec!["rclone", "gdu", "fzf"])
     } else if run_ok("which zypper") {
-        ("sudo zypper install -y", vec!["rclone", "gdu", "fzf", "python3-tqdm"])
+        ("sudo zypper install -y", vec!["rclone", "gdu", "fzf"])
     } else if run_ok("which apk") {
-        ("sudo apk add", vec!["rclone", "gdu", "fzf", "tqdm"])
+        ("sudo apk add", vec!["rclone", "gdu", "fzf"])
     } else {
         e(&format!("{}No known package manager found.{}", R, N));
         return false;

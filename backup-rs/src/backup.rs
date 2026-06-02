@@ -7,8 +7,18 @@ use std::thread;
 
 pub fn save_package_lists(dest: &str) {
     e(&format!("{}--- Saving package lists ---{}", M, N));
-    let _ = run(&format!("pacman -Qqen > '{}/pacman-official.txt'", dest));
-    let _ = run(&format!("pacman -Qqem > '{}/pacman-aur.txt'", dest));
+    // Arch
+    let _ = run(&format!("pacman -Qqen > '{}/packages-pacman-official.txt' 2>/dev/null", dest));
+    let _ = run(&format!("pacman -Qqem > '{}/packages-aur.txt' 2>/dev/null", dest));
+    // Debian / Ubuntu
+    let _ = run(&format!("dpkg --get-selections > '{}/packages-dpkg.txt' 2>/dev/null", dest));
+    // Fedora
+    let _ = run(&format!("dnf list installed 2>/dev/null | tail -n +2 | awk '{{print \\$1}}' > '{}/packages-dnf.txt'", dest));
+    // openSUSE
+    let _ = run(&format!("zypper se --installed-only -s 2>/dev/null | tail -n +5 | awk '{{print \\$3}}' > '{}/packages-zypper.txt'", dest));
+    // Alpine
+    let _ = run(&format!("apk info > '{}/packages-apk.txt' 2>/dev/null", dest));
+    // Cross-platform
     let _ = run(&format!("flatpak list --app --columns=application > '{}/flatpak-list.txt' 2>/dev/null", dest));
     let _ = run(&format!("snap list > '{}/snap-list.txt' 2>/dev/null", dest));
 }

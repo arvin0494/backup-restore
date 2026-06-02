@@ -24,15 +24,55 @@ pub fn do_restore(backup_dir: &str, dest_dir: &str, auto: bool) -> anyhow::Resul
     let dd = dest_dir.to_string_lossy().to_string();
     let mut items: Vec<Item> = Vec::new();
 
-    // Package lists
-    if Path::new(&format!("{}/pacman-official.txt", bd)).exists() {
+    // Package lists — distro-agnostic
+    // Arch
+    let pac_off = format!("{}/packages-pacman-official.txt", bd);
+    let pac_off_old = format!("{}/pacman-official.txt", bd);
+    if (Path::new(&pac_off).exists() || Path::new(&pac_off_old).exists()) && run_ok("which pacman") {
         let d = bd.clone();
-        items.push(("official-pkgs".into(), "Install official packages (pacman)".into(), Some(Box::new(move || { let _ = run(&format!("sudo pacman -S --needed - < '{}/pacman-official.txt'", d)); }))));
+        items.push(("official-pkgs".into(), "Install official packages (pacman)".into(), Some(Box::new(move || {
+            let f = if Path::new(&format!("{}/packages-pacman-official.txt", d)).exists() { "packages-pacman-official.txt" } else { "pacman-official.txt" };
+            let _ = run(&format!("sudo pacman -S --needed - < '{}/{}'", d, f));
+        }))));
     }
-    if Path::new(&format!("{}/pacman-aur.txt", bd)).exists() && run_ok("which yay") {
+    let pac_aur = format!("{}/packages-aur.txt", bd);
+    let pac_aur_old = format!("{}/pacman-aur.txt", bd);
+    if (Path::new(&pac_aur).exists() || Path::new(&pac_aur_old).exists()) && run_ok("which yay") {
         let d = bd.clone();
-        items.push(("aur-pkgs".into(), "Install AUR packages (yay)".into(), Some(Box::new(move || { let _ = run(&format!("yay -S --needed - < '{}/pacman-aur.txt'", d)); }))));
+        items.push(("aur-pkgs".into(), "Install AUR packages (yay)".into(), Some(Box::new(move || {
+            let f = if Path::new(&format!("{}/packages-aur.txt", d)).exists() { "packages-aur.txt" } else { "pacman-aur.txt" };
+            let _ = run(&format!("yay -S --needed - < '{}/{}'", d, f));
+        }))));
     }
+    // Debian / Ubuntu
+    if Path::new(&format!("{}/packages-dpkg.txt", bd)).exists() && run_ok("which dpkg") {
+        let d = bd.clone();
+        items.push(("dpkg-pkgs".into(), "Install packages (dpkg/apt)".into(), Some(Box::new(move || {
+            let _ = run(&format!("sudo apt-get update && sudo apt-get install -y $(awk '{{print $1}}' '{}/packages-dpkg.txt')", d));
+        }))));
+    }
+    // Fedora
+    if Path::new(&format!("{}/packages-dnf.txt", bd)).exists() && run_ok("which dnf") {
+        let d = bd.clone();
+        items.push(("dnf-pkgs".into(), "Install packages (dnf)".into(), Some(Box::new(move || {
+            let _ = run(&format!("sudo dnf install -y $(cat '{}/packages-dnf.txt')", d));
+        }))));
+    }
+    // openSUSE
+    if Path::new(&format!("{}/packages-zypper.txt", bd)).exists() && run_ok("which zypper") {
+        let d = bd.clone();
+        items.push(("zypper-pkgs".into(), "Install packages (zypper)".into(), Some(Box::new(move || {
+            let _ = run(&format!("sudo zypper install -y $(cat '{}/packages-zypper.txt')", d));
+        }))));
+    }
+    // Alpine
+    if Path::new(&format!("{}/packages-apk.txt", bd)).exists() && run_ok("which apk") {
+        let d = bd.clone();
+        items.push(("apk-pkgs".into(), "Install packages (apk)".into(), Some(Box::new(move || {
+            let _ = run(&format!("sudo apk add $(cat '{}/packages-apk.txt')", d));
+        }))));
+    }
+    // Cross-platform
     if Path::new(&format!("{}/flatpak-list.txt", bd)).exists() && run_ok("which flatpak") {
         let d = bd.clone();
         items.push(("flatpaks".into(), "Install Flatpaks".into(), Some(Box::new(move || { let _ = run(&format!("xargs flatpak install -y < '{}/flatpak-list.txt'", d)); }))));
