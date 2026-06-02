@@ -88,9 +88,9 @@ pub fn copy_progress(
     let mut extra = String::new();
     if ntfs { extra.push_str(" --ignore-errors"); }
     if skip_links { extra.push_str(" --skip-links"); }
-    // --verbose shows each file scrolling, --stats prints periodic summary
+    // Use --progress for the live status bar with fast updates
     let full = format!(
-        "{} --verbose --stats=1s --checkers {} --transfers {}{}",
+        "{} --progress --stats=200ms --checkers {} --transfers {}{}",
         base_cmd, checkers, checkers, extra,
     );
 
