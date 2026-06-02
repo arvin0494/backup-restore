@@ -13,7 +13,7 @@ Backup your Linux system before reinstalling, then restore everything after.
 - **Auto-detect path** — `/mnt/HDD4T/BACKUP/{hostname}[-{os_id}]`
 - **Live progress** — rclone `--progress` with file names, speed, ETA
 - **Drive-aware** — `--checkers` / `--transfers` tuned to HDD (3), SSD (8), or NVMe (16)
-- **Robust cancellation** — Ctrl+C kills the entire rclone process group, not just Python
+- **Robust cancellation** — Ctrl+C kills the entire rclone process group, not just the script
 - **Logging** — `backup.log` written alongside every backup
 - **Restore with fzf** — checkbox-style multi-select (falls back to numbered menu)
 
@@ -35,26 +35,17 @@ bash install.sh
 
 The installer checks for Rust, offers to install it (rustup or system package manager), builds the binary, and adds the `bckup` alias to your shell.
 
-Or download just the Python script:
-
-```bash
-curl -O https://raw.githubusercontent.com/arvin0494/backup-restore/main/backup-for-reinstall.py
-```
-
 ## Dependencies
 
-**Rust version** — auto‑installed by `install.sh`.  
-**Python version** — auto‑installed on first run (pacman, apt, dnf, zypper, apk):
+Auto‑installed by `install.sh` (pacman, apt, dnf, zypper, apk):
 
 - `rclone` — fast cloud/local sync with progress display
 - `gdu` — parallel disk usage estimation
 - `fzf` — fuzzy multi-select for restore
-- `python-tqdm` — restore progress bar
 
 ## Usage
 
-After `install.sh` you can use the `bckup` command directly.  
-With the Python script use `python3 backup-for-reinstall.py`.
+After `install.sh` you can use the `bckup` command directly.
 
 ### Configuration
 

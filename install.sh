@@ -265,5 +265,4 @@ printf "  ${C}╚═════════════════════
 echo ""
 printf "  ${W}▸${N} RUN ................................ ${C}bckup -b${N}\n"
 printf "  ${W}▸${N} HELP ............................... ${C}bckup --help${N}\n"
-printf "  ${W}▸${N} PYTHON ............................. ${C}$DEST/backup-for-reinstall.py${N}\n"
 echo ""
