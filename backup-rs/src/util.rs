@@ -88,8 +88,9 @@ pub fn copy_progress(
     let mut extra = String::new();
     if ntfs { extra.push_str(" --ignore-errors"); }
     if skip_links { extra.push_str(" --skip-links"); }
+    // Use --stats=200ms so the progress bar updates rapidly during scanning phase
     let full = format!(
-        "{} --progress --stats 1s --checkers {} --transfers {}{}",
+        "{} --progress --stats=200ms --checkers {} --transfers {}{}",
         base_cmd, checkers, checkers, extra,
     );
 
@@ -109,7 +110,7 @@ pub fn copy_progress_verbose(
     checkers: u32,
 ) -> anyhow::Result<i32> {
     let full = format!(
-        "{} --verbose --stats 1s --checkers {} --transfers {}",
+        "{} --verbose --stats=200ms --checkers {} --transfers {}",
         base_cmd, checkers, checkers,
     );
 

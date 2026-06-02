@@ -155,6 +155,7 @@ pub fn backup_home(dest: &str, ck: u32) {
     e(&format!("{}--- Backing up home data ---{}", M, N));
     e(&format!("  {}Source:{} ~/ (full home, excluded: .cache, node_modules, etc.)", C, N));
     e(&format!("  {}Target:{} {}/home", C, N, dest));
+    e(&format!("  {}Scanning home directory (this may take a minute)...{}", Y, N));
     let home_dest = format!("{}/home", dest);
     let _ = std::fs::create_dir_all(&home_dest);
 
