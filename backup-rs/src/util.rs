@@ -122,6 +122,7 @@ pub fn copy_progress(
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::piped())
+        .current_dir(std::env::temp_dir())
         .spawn()?;
 
     let stderr = child.stderr.take().unwrap();
@@ -132,9 +133,9 @@ pub fn copy_progress(
         let reader = BufReader::new(stderr);
         for line in reader.lines() {
             let line = match line { Ok(l) => l, Err(_) => break };
-            if line.contains("Transferred:") || (line.contains('%') && (line.contains("Checks:") || line.contains("Listed:"))) {
+            if line.contains("Transferred:") || line.contains("Listed:") || (line.contains('%') && line.contains("Checks:")) {
                 *pclone.lock().unwrap() = line;
-            } else if line.contains("Listed:") || line.contains("Elapsed time:") {
+            } else if line.contains("Elapsed time:") {
                 // skip
             } else {
                 eprintln!("{}", line);
@@ -226,6 +227,10 @@ fn parse_stats_line(line: &str) -> (String, String, String, String) {
             line[start..idx].to_string()
         } else { String::new() };
         (String::new(), pct, String::new(), String::new())
+    } else if line.starts_with("Listed") {
+        // "Listed: 12345" — show as transferred count
+        let count = line.trim_start_matches("Listed:").trim().to_string();
+        (count, String::new(), String::new(), String::new())
     } else {
         (String::new(), String::new(), String::new(), String::new())
     };
