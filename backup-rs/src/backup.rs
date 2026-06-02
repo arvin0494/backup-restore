@@ -92,9 +92,9 @@ pub fn backup_config(dest: &str, ck: u32) {
     let ex = excludes.join(" ");
 
     e(&format!("  {}Syncing configs...{}", Y, N));
-    let _ = copy_progress(
-        &format!("rclone copy ~/.config/ '{}/' --verbose {}", cfg_dest, ex),
-        ck, true, true,
+    let _ = copy_progress_verbose(
+        &format!("rclone copy ~/.config/ '{}/' {}", cfg_dest, ex),
+        ck,
     );
 
     let home = crate::HOME.get().unwrap();

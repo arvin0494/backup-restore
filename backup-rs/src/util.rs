@@ -104,6 +104,26 @@ pub fn copy_progress(
     Ok(status.code().unwrap_or(-1))
 }
 
+pub fn copy_progress_verbose(
+    base_cmd: &str,
+    checkers: u32,
+) -> anyhow::Result<i32> {
+    let full = format!(
+        "{} --verbose --stats 1s --checkers {} --transfers {}",
+        base_cmd, checkers, checkers,
+    );
+
+    let mut child = Command::new("sh")
+        .arg("-c").arg(&full)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::inherit())
+        .spawn()?;
+
+    let status = child.wait()?;
+    Ok(status.code().unwrap_or(-1))
+}
+
 pub fn _fmt(size: u64) -> String {
     // Try numfmt first
     let out = run_stdout(&format!("numfmt --to=iec {}", size));
