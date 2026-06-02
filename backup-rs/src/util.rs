@@ -132,13 +132,11 @@ pub fn copy_progress(
         let reader = BufReader::new(stderr);
         for line in reader.lines() {
             let line = match line { Ok(l) => l, Err(_) => break };
-            // Stats lines from --stats=1s contain "Transferred:" or "Checks:"
-            if line.contains("Transferred:") || (line.contains('%') && line.contains("Checks:")) {
+            if line.contains("Transferred:") || (line.contains('%') && (line.contains("Checks:") || line.contains("Listed:"))) {
                 *pclone.lock().unwrap() = line;
-            } else if line.contains("Elapsed time:") {
+            } else if line.contains("Listed:") || line.contains("Elapsed time:") {
                 // skip
             } else {
-                // NOTICE/ERROR/other — forward to terminal
                 eprintln!("{}", line);
             }
         }
@@ -166,12 +164,16 @@ pub fn copy_progress(
             // Build a progress bar
             let bar = make_bar(&pct, bar_width);
 
-            // Build the display line like: {msg} {transferred} {speed} {eta} [{bar}] {pct}%
-            let pct_display = if pct.is_empty() { "-".to_string() } else { pct.clone() };
-            let display = format!(
-                "\r  {}{:<20} {:>14}  {:>8}  {:>5}  {} {:>3}%{}",
-                Y, msg, transferred, speed, eta, bar, pct_display, N,
-            );
+            // Build the display line
+            let display = if stats.is_empty() {
+                format!("\r  {}{}... listing{}", Y, msg, N)
+            } else {
+                let pct_display = if pct.is_empty() { "-".to_string() } else { pct.clone() };
+                format!(
+                    "\r  {}{:<20} {:>14}  {:>8}  {:>5}  {} {:>3}%{}",
+                    Y, msg, transferred, speed, eta, bar, pct_display, N,
+                )
+            };
             eprint!("{}", display);
             std::io::stderr().flush().ok();
         }
