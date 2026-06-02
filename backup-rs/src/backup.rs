@@ -94,7 +94,7 @@ pub fn backup_config(dest: &str, ck: u32) {
     e(&format!("  {}Syncing configs...{}", Y, N));
     let _ = copy_progress(
         &format!("rclone copy ~/.config/ '{}/' {}", cfg_dest, ex),
-        ck, true, true, false, Some("Configs"),
+        ck, true, true, false, 0, Some("Configs"),
     );
 
     let home = crate::HOME.get().unwrap();
@@ -126,7 +126,7 @@ pub fn backup_browsers(dest: &str, ck: u32) {
             let sm = format!("{} browser", name);
             let _ = copy_progress(
                 &format!("rclone copy '{}/' '{}/{}/' {}", src, b_dest, name, bx),
-                ck, true, true, false, Some(&sm),
+                ck, true, true, false, 0, Some(&sm),
             );
         }
     }
@@ -145,9 +145,10 @@ pub fn backup_vm(dest: &str, ck: u32) {
         let imgsz = run_stdout(&format!("sudo du -sh '{}' | cut -f1", VM_IMAGES_SRC));
         e(&format!("  {}VM disk images:{} {}{}{}", C, N, W, imgsz, N));
         e(&format!("  {}Syncing...{}", Y, N));
+        let fc = count_files(VM_IMAGES_SRC);
         let _ = copy_progress(
             &format!("sudo rclone copy '{}/' '{}/images/' --inplace", VM_IMAGES_SRC, vm_dest),
-            ck, true, false, true, Some("VM images"),
+            ck, true, false, true, fc, Some("VM images"),
         );
     }
 }
@@ -156,7 +157,9 @@ pub fn backup_home(dest: &str, ck: u32) {
     e(&format!("{}--- Backing up home data ---{}", M, N));
     e(&format!("  {}Source:{} ~/ (full home, excluded: .cache, node_modules, etc.)", C, N));
     e(&format!("  {}Target:{} {}/home", C, N, dest));
-    e(&format!("  {}Scanning home directory...{}", Y, N));
+    e(&format!("  {}Counting files...{}", Y, N));
+    let fc = count_files(&format!("{}/", crate::HOME.get().unwrap()));
+    e(&format!("  {}Scanning home directory...{} ({} files)", Y, N, fc));
     let home_dest = format!("{}/home", dest);
     let _ = std::fs::create_dir_all(&home_dest);
 
@@ -166,7 +169,7 @@ pub fn backup_home(dest: &str, ck: u32) {
     let hx = hx.join(" ");
     let _ = copy_progress(
         &format!("sudo rclone copy ~/ '{}' --links --inplace {}", home_dest, hx),
-        ck, false, false, true, Some("Scanning home"),
+        ck, false, false, true, fc, Some("Scanning home"),
     );
 }
 
@@ -188,7 +191,7 @@ pub fn backup_extra(dest: &str, ck: u32) {
         e(&format!("  {}Backing up {}...{}", Y, name, N));
         let _ = copy_progress(
             &format!("rclone copy '{}/' '{}/'", src, target),
-            ck, false, false, true, Some(&sm),
+            ck, false, false, true, 0, Some(&sm),
         );
     }
 }

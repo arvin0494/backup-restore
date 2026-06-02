@@ -81,12 +81,28 @@ pub fn run_stdout(cmd: &str) -> String {
         .unwrap_or_default()
 }
 
+pub fn count_files(path: &str) -> u64 {
+    // Use maxdepth 4 for a fast estimate
+    let out = Command::new("sh")
+        .arg("-c")
+        .arg(format!("find '{}' -maxdepth 4 -xdev -type f 2>/dev/null | wc -l", path))
+        .output()
+        .ok()
+        .and_then(|o| {
+            let s = String::from_utf8_lossy(&o.stdout).trim().to_string();
+            if s.is_empty() { None } else { Some(s) }
+        })
+        .unwrap_or_default();
+    out.parse().unwrap_or(0)
+}
+
 pub fn copy_progress(
     base_cmd: &str,
     checkers: u32,
     ntfs: bool,
     skip_links: bool,
     no_traverse: bool,
+    total_files: u64,
     scan_msg: Option<&str>,
 ) -> anyhow::Result<i32> {
     let mut extra = String::new();
@@ -109,22 +125,27 @@ pub fn copy_progress(
     if let Some(msg) = scan_msg {
         let start = Instant::now();
         loop {
-            thread::sleep(Duration::from_secs(5));
+            thread::sleep(Duration::from_secs(1));
             if let Some(_) = child.try_wait()? {
                 break;
             }
             let d = start.elapsed();
-            let m = d.as_secs() / 60;
-            let s = d.as_secs() % 60;
-            let line = if m > 0 {
-                format!("\r  {}{}... {}m {}s  {}", Y, msg, m, s, N)
+            let secs = d.as_secs();
+            let m = secs / 60;
+            let s = secs % 60;
+            let fps = if total_files > 0 && secs > 0 {
+                format!(" ({} files/s)", total_files / secs)
             } else {
-                format!("\r  {}{}... {}s  {}", Y, msg, s, N)
+                String::new()
+            };
+            let line = if m > 0 {
+                format!("\r  {}{}... {}m {}s{}  {}", Y, msg, m, s, fps, N)
+            } else {
+                format!("\r  {}{}... {}s{}  {}", Y, msg, s, fps, N)
             };
             eprint!("{}", line);
             std::io::stderr().flush().ok();
         }
-        // Final newline
         e(&format!("  {}{} complete{}", G, msg, N));
     }
 
