@@ -94,7 +94,7 @@ pub fn backup_config(dest: &str, ck: u32) {
     e(&format!("  {}Syncing configs...{}", Y, N));
     let _ = copy_progress(
         &format!("rclone copy ~/.config/ '{}/' {}", cfg_dest, ex),
-        ck, true, true, false, 0, Some("Configs"),
+        ck, true, true, false,
     );
 
     let home = crate::HOME.get().unwrap();
@@ -123,10 +123,10 @@ pub fn backup_browsers(dest: &str, ck: u32) {
         let src = format!("{}/{}", home, src_rel);
         if Path::new(&src).is_dir() {
             e(&format!("  {}Backing up {}...{}", Y, name, N));
-            let sm = format!("{} browser", name);
+            let _sm = format!("{} browser", name);
             let _ = copy_progress(
                 &format!("rclone copy '{}/' '{}/{}/' {}", src, b_dest, name, bx),
-                ck, true, true, false, 0, Some(&sm),
+                ck, true, true, false,
             );
         }
     }
@@ -145,10 +145,10 @@ pub fn backup_vm(dest: &str, ck: u32) {
         let imgsz = run_stdout(&format!("sudo du -sh '{}' | cut -f1", VM_IMAGES_SRC));
         e(&format!("  {}VM disk images:{} {}{}{}", C, N, W, imgsz, N));
         e(&format!("  {}Syncing...{}", Y, N));
-        let fc = count_files(VM_IMAGES_SRC);
+        let _fc = count_files(VM_IMAGES_SRC);
         let _ = copy_progress(
             &format!("sudo rclone copy '{}/' '{}/images/' --inplace", VM_IMAGES_SRC, vm_dest),
-            ck, true, false, true, fc, Some("VM images"),
+            ck, true, false, true,
         );
     }
 }
@@ -169,7 +169,7 @@ pub fn backup_home(dest: &str, ck: u32) {
     let hx = hx.join(" ");
     let _ = copy_progress(
         &format!("sudo rclone copy ~/ '{}' --links --inplace {}", home_dest, hx),
-        ck, false, false, true, fc, Some("Scanning home"),
+        ck, false, false, true,
     );
 }
 
@@ -187,11 +187,11 @@ pub fn backup_extra(dest: &str, ck: u32) {
         }
         let name = p.file_name().unwrap_or_default().to_string_lossy().to_string();
         let target = format!("{}/{}", extra_dest, name);
-        let sm = format!("Extra: {}", name);
+        let _sm = format!("Extra: {}", name);
         e(&format!("  {}Backing up {}...{}", Y, name, N));
         let _ = copy_progress(
             &format!("rclone copy '{}/' '{}/'", src, target),
-            ck, false, false, true, 0, Some(&sm),
+            ck, false, false, true,
         );
     }
 }

@@ -1,8 +1,6 @@
 use std::io::Write;
 use std::process::{Command, Output, Stdio};
 use std::sync::{Mutex, OnceLock};
-use std::thread;
-use std::time::{Duration, Instant};
 
 /// Global log file path, set at backup start.
 pub static LOG_FILE: OnceLock<Mutex<String>> = OnceLock::new();
@@ -103,8 +101,6 @@ pub fn copy_progress(
     ntfs: bool,
     skip_links: bool,
     no_traverse: bool,
-    _total_files: u64,
-    scan_msg: Option<&str>,
 ) -> anyhow::Result<i32> {
     let mut extra = String::new();
     if ntfs { extra.push_str(" --ignore-errors"); }
@@ -116,43 +112,14 @@ pub fn copy_progress(
         base_cmd, checkers, checkers, extra,
     );
 
-    let mut child = Command::new("sh")
+    let status = Command::new("sh")
         .arg("-c").arg(&full)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::inherit())
         .current_dir(std::env::temp_dir())
-        .spawn()?;
+        .status()?;
 
-    if let Some(msg) = scan_msg {
-        let start = Instant::now();
-        loop {
-            thread::sleep(Duration::from_secs(2));
-            match child.try_wait()? {
-                Some(status) => {
-                    let d = start.elapsed();
-                    let m = d.as_secs() / 60;
-                    let s = d.as_secs() % 60;
-                    let elapsed = if m > 0 { format!("{}m {}s", m, s) } else { format!("{}s", s) };
-                    eprintln!("  {}{} complete ({}){}", G, msg, elapsed, N);
-                    return Ok(status.code().unwrap_or(-1));
-                }
-                None => {}
-            }
-            let d = start.elapsed();
-            let secs = d.as_secs();
-            let m = secs / 60;
-            let s = secs % 60;
-            let line = if m > 0 {
-                format!("  {}{}... {}m {}s{}", Y, msg, m, s, N)
-            } else {
-                format!("  {}{}... {}s{}", Y, msg, s, N)
-            };
-            eprintln!("{}", line);
-        }
-    }
-
-    let status = child.wait()?;
     Ok(status.code().unwrap_or(-1))
 }
 
