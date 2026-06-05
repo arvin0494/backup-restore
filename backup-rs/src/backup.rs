@@ -1,3 +1,4 @@
+use crate::config;
 use crate::config::*;
 use crate::util::*;
 use std::io::Write;
@@ -22,7 +23,7 @@ pub fn gdu_size(path: &str, ignore: &str) -> u64 {
 }
 
 pub fn save_package_lists(dest: &str) {
-    e(&format!("{}--- Saving package lists ---{}", M, N));
+    e("Saving package lists");
     let commands = [
         ("pacman -Qqen", "packages-pacman-official.txt"),
         ("pacman -Qqem", "packages-aur.txt"),
@@ -39,39 +40,33 @@ pub fn save_package_lists(dest: &str) {
 }
 
 pub fn estimate_home_size() -> u64 {
-    let total = 0u64;
     if !run_ok("which gdu") {
-        return total;
+        return 0;
     }
-    e(&format!("  {}Estimating size...{}", Y, N));
+    e("Estimating size...");
     let gdu_ignore = GDU_IGNORE_DIRS.join(",");
     let mut total = 0u64;
 
     for d in GDU_SCAN_DIRS {
         let p = format!("{}/{}", crate::HOME.get().unwrap(), d);
         if !Path::new(&p).is_dir() { continue; }
-        e(&format!("  {}  {}...{}", Y, d, N));
+        e(&format!("  {}{}{} ...", C, d, N));
         total += gdu_size(&p, &gdu_ignore);
     }
     for d in extra_backup_dirs() {
         if !Path::new(&d).is_dir() { continue; }
         let name = Path::new(&d).file_name().unwrap_or_default().to_string_lossy().to_string();
-        e(&format!("  {}  {}...{}", Y, name, N));
+        e(&format!("  {}{}{} ...", C, name, N));
         total += gdu_size(&d, &gdu_ignore);
     }
-    e(&format!("  {}Estimated data size:{} {}{}{}", C, N, W, fmt(total), N));
+    e(&format!("Estimated data size: {}{}{}", W, fmt(total), N));
     total
 }
 
 pub fn backup_config(dest: &str, ck: u32) {
-    e(&format!("{}--- Backing up configs ---{}", M, N));
-    e(&format!("  {}Source:{} ~/.config, ~/.ssh, ~/.gnupg", C, N));
-    e(&format!("  {}Target:{} {}/config", C, N, dest));
+    e("Backing up configs");
     let cfg_dest = format!("{}/config", dest);
     let _ = std::fs::create_dir_all(&cfg_dest);
-
-    let cfg_size = run_stdout("du -sh ~/.config 2>/dev/null | cut -f1");
-    e(&format!("  {}Config size:{} {}{}{}", C, N, W, cfg_size, N));
 
     let excludes: Vec<String> = CACHE_EXCLUDES.iter()
         .chain(CONFIG_EXCLUDES.iter())
@@ -79,24 +74,24 @@ pub fn backup_config(dest: &str, ck: u32) {
         .collect();
     let ex = excludes.join(" ");
 
-    e(&format!("  {}Syncing configs...{}", Y, N));
+    let home = crate::HOME.get().unwrap();
+    e(&format!("  {}.config{} → ...", W, N));
     let _ = copy_progress(
         &format!("rclone copy ~/.config/ '{}/' {}", cfg_dest, ex),
         ck, true, true, false,
     );
 
-    let home = crate::HOME.get().unwrap();
     for item in &[".ssh", ".gnupg", ".local/share/keyrings"] {
         let src = format!("{}/{}", home, item);
         if Path::new(&src).is_dir() {
+            e(&format!("  {}{}{} → ...", W, item, N));
             let _ = run(&format!("cp -a '{}' '{}/' 2>/dev/null", src, dest));
         }
     }
 }
 
 pub fn backup_browsers(dest: &str, ck: u32) {
-    e(&format!("{}--- Backing up browser data ---{}", M, N));
-    e(&format!("  {}Target:{} {}/browser", C, N, dest));
+    e("Backing up browser data");
     let b_dest = format!("{}/browser", dest);
     let _ = std::fs::create_dir_all(&b_dest);
 
@@ -107,31 +102,45 @@ pub fn backup_browsers(dest: &str, ck: u32) {
     let bx = bx.join(" ");
     let home = crate::HOME.get().unwrap();
 
+    let manifest_path = config::manifest_path();
+    let mut manifest = load_manifest(&manifest_path);
+    let mut changed = 0u32;
+    let mut skipped = 0u32;
+
     for (src_rel, name) in BROWSERS {
         let src = format!("{}/{}", home, src_rel);
-        if Path::new(&src).is_dir() {
-            e(&format!("  {}Backing up {}...{}", Y, name, N));
-            let _ = copy_progress(
-                &format!("rclone copy '{}/' '{}/{}/' {}", src, b_dest, name, bx),
-                ck, true, true, false,
-            );
+        if !Path::new(&src).is_dir() { continue; }
+        let mtime = dir_mtime(&src).unwrap_or(0);
+        if manifest.get(*name) == Some(&mtime) {
+            e(&format!("  {}{}{} unchanged", C, name, N));
+            skipped += 1;
+            continue;
         }
+        e(&format!("  {}{}{} → ...", W, name, N));
+        let _ = copy_progress(
+            &format!("rclone copy '{}/' '{}/{}/' {}", src, b_dest, name, bx),
+            ck, true, true, false,
+        );
+        manifest.insert(name.to_string(), mtime);
+        changed += 1;
+    }
+    let _ = save_manifest(&manifest_path, &manifest);
+    if changed > 0 || skipped > 0 {
+        e(&format!("Done: {} backed up, {} skipped", changed, skipped));
     }
 }
 
 pub fn backup_vm(dest: &str, ck: u32) {
-    e(&format!("{}--- Backing up VM data ---{}", M, N));
+    e("Backing up VM data");
     let vm_dest = format!("{}/virt-manager", dest);
     let _ = std::fs::create_dir_all(&vm_dest);
 
     if Path::new(VM_QEMU_SRC).is_dir() {
-        e(&format!("  {}Backing up libvirt VM configs...{}", Y, N));
+        e(&format!("  {}libvirt configs{} → ...", W, N));
         let _ = run(&format!("sudo cp -a '{}' '{}/' 2>/dev/null", VM_QEMU_SRC, vm_dest));
     }
     if Path::new(VM_IMAGES_SRC).is_dir() {
-        let imgsz = run_stdout(&format!("sudo du -sh '{}' | cut -f1", VM_IMAGES_SRC));
-        e(&format!("  {}VM disk images:{} {}{}{}", C, N, W, imgsz, N));
-        e(&format!("  {}Syncing...{}", Y, N));
+        e(&format!("  {}VM disk images{} → ...", W, N));
         let _ = copy_progress(
             &format!("sudo rclone copy '{}/' '{}/images/' --inplace", VM_IMAGES_SRC, vm_dest),
             ck, true, false, true,
@@ -140,10 +149,7 @@ pub fn backup_vm(dest: &str, ck: u32) {
 }
 
 pub fn backup_home(dest: &str, ck: u32) {
-    e(&format!("{}--- Backing up home data ---{}", M, N));
-    e(&format!("  {}Source:{} ~/ (full home, excluded: .cache, node_modules, etc.)", C, N));
-    e(&format!("  {}Target:{} {}/home", C, N, dest));
-    e(&format!("  {}Scanning home directory...{}", Y, N));
+    e("Backing up home data");
     let home_dest = format!("{}/home", dest);
     let _ = std::fs::create_dir_all(&home_dest);
 
@@ -151,6 +157,7 @@ pub fn backup_home(dest: &str, ck: u32) {
         .map(|x| format!("--exclude '{}'", x))
         .collect();
     let hx = hx.join(" ");
+    e(&format!("  {}~{}{} → ...", W, N, N));
     let _ = copy_progress(
         &format!("sudo rclone copy ~/ '{}' --links --inplace {}", home_dest, hx),
         ck, false, false, true,
@@ -160,22 +167,40 @@ pub fn backup_home(dest: &str, ck: u32) {
 pub fn backup_extra(dest: &str, ck: u32) {
     let dirs = extra_backup_dirs();
     if dirs.is_empty() { return; }
-    e(&format!("{}--- Backing up extra dirs ---{}", M, N));
+    e("Backing up extra dirs");
     let extra_dest = format!("{}/extra", dest);
     let _ = std::fs::create_dir_all(&extra_dest);
+
+    let manifest_path = config::manifest_path();
+    let mut manifest = load_manifest(&manifest_path);
+    let mut changed = 0u32;
+    let mut skipped = 0u32;
+
     for src in dirs {
         let p = Path::new(&src);
         if !p.is_dir() {
-            e(&format!("  {}  Skipping {} (not found){}", Y, src, N));
+            e(&format!("  {}{}{} not found", Y, src, N));
             continue;
         }
         let name = p.file_name().unwrap_or_default().to_string_lossy().to_string();
+        let mtime = dir_mtime(&src).unwrap_or(0);
+        if manifest.get(&name) == Some(&mtime) {
+            e(&format!("  {}{}{} unchanged", C, name, N));
+            skipped += 1;
+            continue;
+        }
         let target = format!("{}/{}", extra_dest, name);
-        e(&format!("  {}Backing up {}...{}", Y, name, N));
+        e(&format!("  {}{}{} → ...", W, name, N));
         let _ = copy_progress(
             &format!("rclone copy '{}/' '{}/'", src, target),
             ck, false, false, true,
         );
+        manifest.insert(name, mtime);
+        changed += 1;
+    }
+    let _ = save_manifest(&manifest_path, &manifest);
+    if changed > 0 || skipped > 0 {
+        e(&format!("Done: {} backed up, {} skipped", changed, skipped));
     }
 }
 
@@ -185,37 +210,35 @@ pub fn do_backup(dest: &str, auto_yes: bool) -> anyhow::Result<()> {
     let base_mount = dest.parent().and_then(|p| p.parent()).map(|p| p.to_string_lossy().to_string())
         .unwrap_or_default();
 
-    // Check mount
     if !run_ok(&format!("findmnt -n '{}'", base_mount)) {
-        e(&format!("  {}Error: backup drive not mounted at {}{}", R, base_mount, N));
-        e(&format!("  {}Mount the drive and try again.{}", Y, N));
+        e(&format!("{}Error: backup drive not mounted at {}{}", R, base_mount, N));
+        e(&format!("{}Mount the drive and try again.{}", Y, N));
         std::process::exit(1);
     }
     let _ = std::fs::create_dir_all(dest);
 
     let complete_marker = dest.join(".complete");
     init_log(format!("{}/backup.log", dest_str));
-    e(&format!("{}Log:{} {}{}{}", C, N, Y, dest.join("backup.log").display(), N));
 
-    e(&format!("{}Backing up to:{} {}{}{}", C, N, W, dest.display(), N));
+    e(&format!("Target: {}{}{}", W, dest.display(), N));
     if complete_marker.exists() {
-        e(&format!("  {}Warning: backup already exists at this location{}", Y, N));
+        e(&format!("{}Warning: backup already exists at this location{}", Y, N));
         if !auto_yes {
             print!("  Overwrite existing backup? [y/N] ");
             std::io::stdout().flush().ok();
             let mut buf = String::new();
             std::io::stdin().read_line(&mut buf).ok();
             if buf.trim().to_lowercase() != "y" {
-                e(&format!("  {}Cancelled.{}", Y, N));
+                e(&format!("{}Cancelled.{}", Y, N));
                 return Ok(());
             }
         }
     }
 
     let ck = detect_checkers(&dest_str);
-    e(&format!("  {}Checkers:{} {}{}{}", C, N, W, ck, N));
+    let kind = if ck <= 3 { "HDD" } else if ck <= 8 { "SSD" } else { "NVMe" };
+    e(&format!("Checkers: {} ({})", ck, kind));
 
-    // Run gdu estimation in parallel with package lists
     let gdu_handle = thread::spawn(|| estimate_home_size());
     save_package_lists(&dest_str);
     let _ = gdu_handle.join();
@@ -226,15 +249,12 @@ pub fn do_backup(dest: &str, auto_yes: bool) -> anyhow::Result<()> {
     backup_home(&dest_str, ck);
     backup_extra(&dest_str, ck);
 
-    // Summary
     let sz_out = run_stdout(&format!("du -sh '{}' | cut -f1", dest_str));
-    e(&format!("  {}=============================={}", G, N));
-    e(&format!("  {}{}Backup complete!{}", W, W, N));
-    e(&format!("  {}Size:{} {}{}{}", C, N, W, sz_out, N));
-    e(&format!("  {}Location:{} {}{}{}", C, N, W, dest.display(), N));
-    e(&format!("  {}=============================={}", G, N));
+    e(&format!("{}{}Done!{}", BOLD, G, N));
+    e(&format!("Size: {}{}{}", W, sz_out, N));
+    e(&format!("Location: {}{}{}", W, dest.display(), N));
     let _ = std::fs::write(&complete_marker, "");
-    e(&format!("  {}To restore:{} {} --restore {}", Y, N, std::env::args().next().unwrap_or_default(), dest_str));
+    e(&format!("Log: {}{}{}", Y, dest.join("backup.log").display(), N));
 
     Ok(())
 }

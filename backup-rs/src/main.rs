@@ -47,7 +47,7 @@ fn main() -> anyhow::Result<()> {
             Ok(_) => {}
             Err(_) => {
                 eprintln!();
-                util::e(&format!("  {}Backup cancelled.{}", util::R, util::N));
+                util::e(&format!("{}Backup cancelled.{}", util::R, util::N));
             }
         }
         return Ok(());
@@ -72,7 +72,7 @@ fn main() -> anyhow::Result<()> {
             Ok(_) => {}
             Err(_) => {
                 eprintln!();
-                util::e(&format!("  {}Restore cancelled.{}", util::R, util::N));
+                util::e(&format!("{}Restore cancelled.{}", util::R, util::N));
             }
         }
         return Ok(());
@@ -90,7 +90,7 @@ fn main() -> anyhow::Result<()> {
             Ok(_) => {}
             Err(_) => {
                 eprintln!();
-                util::e(&format!("  {}Backup cancelled.{}", util::R, util::N));
+                util::e(&format!("{}Backup cancelled.{}", util::R, util::N));
             }
         }
     }

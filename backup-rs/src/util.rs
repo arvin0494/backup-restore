@@ -1,4 +1,6 @@
+use std::collections::HashMap;
 use std::io::Write;
+use std::path::Path;
 use std::process::{Command, Output, Stdio};
 use std::sync::{Mutex, OnceLock};
 
@@ -19,14 +21,48 @@ pub fn log_append(s: &str) {
 pub static R: &str = "\x1b[0;31m";
 pub static G: &str = "\x1b[0;32m";
 pub static Y: &str = "\x1b[0;33m";
-pub static M: &str = "\x1b[0;35m";
 pub static C: &str = "\x1b[0;36m";
 pub static W: &str = "\x1b[1;37m";
+pub static BOLD: &str = "\x1b[1m";
 pub static N: &str = "\x1b[0m";
 
-pub fn e(s: &str) {
-    println!("{}", s);
-    log_append(&strip_ansi(s));
+pub fn e(msg: &str) {
+    println!("{BOLD}[{G}*{N}{BOLD}]{N} {msg}");
+    log_append(&strip_ansi(msg));
+}
+
+pub fn dir_mtime(path: &str) -> Option<u64> {
+    std::fs::metadata(path).ok()?
+        .modified().ok()?
+        .duration_since(std::time::UNIX_EPOCH).ok()
+        .map(|d| d.as_secs())
+}
+
+pub fn load_manifest(path: &str) -> HashMap<String, u64> {
+    let mut map = HashMap::new();
+    let content = std::fs::read_to_string(path).unwrap_or_default();
+    for line in content.lines() {
+        if let Some((k, v)) = line.split_once('=') {
+            if let Ok(ts) = v.trim().parse::<u64>() {
+                map.insert(k.trim().to_string(), ts);
+            }
+        }
+    }
+    map
+}
+
+pub fn save_manifest(path: &str, map: &HashMap<String, u64>) -> anyhow::Result<()> {
+    if let Some(parent) = Path::new(path).parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let mut s = String::new();
+    let mut pairs: Vec<_> = map.iter().collect();
+    pairs.sort_by_key(|p| p.0.clone());
+    for (k, v) in pairs {
+        s.push_str(&format!("{}={}\n", k, v));
+    }
+    std::fs::write(path, s)?;
+    Ok(())
 }
 
 fn strip_ansi(s: &str) -> String {

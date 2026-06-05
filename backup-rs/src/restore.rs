@@ -10,10 +10,11 @@ pub fn do_restore(backup_dir: &str, dest_dir: &str, auto: bool) -> anyhow::Resul
     let dest_dir = std::path::absolute(dest_dir)?;
     let _ = std::fs::create_dir_all(&dest_dir);
 
-    e(&format!("{}Backup:{} {}{}{}", C, N, W, backup_dir.display(), N));
-    e(&format!("{}Restore to:{} {}{}{}", C, N, W, dest_dir.display(), N));
+    e(&format!("Backup: {}{}{}", W, backup_dir.display(), N));
+    e(&format!("Restore to: {}{}{}", W, dest_dir.display(), N));
     let ck = detect_checkers(&dest_dir.to_string_lossy());
-    e(&format!("  {}Checkers:{} {}{}{}", C, N, W, ck, N));
+    let kind = if ck <= 3 { "HDD" } else if ck <= 8 { "SSD" } else { "NVMe" };
+    e(&format!("Checkers: {} ({})", ck, kind));
 
     if !backup_dir.is_dir() {
         e(&format!("{}Error: backup directory not found{}", R, N));
@@ -160,6 +161,7 @@ pub fn do_restore(backup_dir: &str, dest_dir: &str, auto: bool) -> anyhow::Resul
         e(&format!("{}Nothing found to restore in that directory{}", R, N));
         std::process::exit(1);
     }
+    e(&format!("Found {} item(s) to restore", items.len()));
 
     // Selection
     let keys: Vec<String> = items.iter().map(|(k, _, _)| k.clone()).collect();
@@ -183,7 +185,7 @@ pub fn do_restore(backup_dir: &str, dest_dir: &str, auto: bool) -> anyhow::Resul
             })
             .collect()
     } else {
-        e(&format!("  {}Select items to restore:{}", Y, N));
+        e("Select items to restore:");
         for (i, label) in labels.iter().enumerate() {
             e(&format!("  {}{}){} {}", C, i + 1, N, label));
         }
@@ -203,12 +205,12 @@ pub fn do_restore(backup_dir: &str, dest_dir: &str, auto: bool) -> anyhow::Resul
     };
 
     if chosen.is_empty() {
-        e(&format!("  {}Nothing selected.{}", Y, N));
+        e(&format!("{}Nothing selected.{}", Y, N));
         return Ok(());
     }
 
-    e(&format!("  {}Restoring:{} {}{}{}", W, N, Y,
-        chosen.iter().map(|&i| labels[i]).collect::<Vec<_>>().join(", "), N));
+    e(&format!("Restoring: {}{}{}",
+        Y, chosen.iter().map(|&i| labels[i]).collect::<Vec<_>>().join(", "), N));
 
     if !auto {
         print!("  Proceed? [Y/n] ");
@@ -216,25 +218,22 @@ pub fn do_restore(backup_dir: &str, dest_dir: &str, auto: bool) -> anyhow::Resul
         let mut buf = String::new();
         std::io::stdin().read_line(&mut buf).ok();
         if buf.trim().to_lowercase() == "n" {
-            e(&format!("  {}Cancelled.{}", Y, N));
+            e(&format!("{}Cancelled.{}", Y, N));
             return Ok(());
         }
     }
 
     // Execute each selected item
     for &i in &chosen {
-        if let Some((_, desc, ref mut cb_opt)) = items.get_mut(i) {
-            let desc = desc.clone();
-            e(&format!("{}--- {} ---{}", M, desc, N));
+        if let Some((key, _, ref mut cb_opt)) = items.get_mut(i) {
+            e(&format!("  {}{}{} → ...", W, key, N));
             if let Some(cb) = cb_opt.take() {
                 cb();
             }
         }
     }
 
-    e(&format!("  {}=============================={}", G, N));
-    e(&format!("  {}{}Restore complete!{}", W, W, N));
-    e(&format!("  {}=============================={}", G, N));
+    e(&format!("{}{}Done!{}", BOLD, G, N));
 
     Ok(())
 }

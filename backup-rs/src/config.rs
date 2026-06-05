@@ -92,3 +92,10 @@ pub const GDU_SCAN_DIRS: &[&str] = &[
     "Projects", "Templates", "Public", "Games",
     ".local", ".fonts", ".themes", ".icons",
 ];
+
+pub const MANIFEST_FILE: &str = "~/.local/share/backup-restore/manifest";
+
+pub fn manifest_path() -> String {
+    let home = std::env::var("HOME").unwrap_or_else(|_| "/root".into());
+    MANIFEST_FILE.replacen('~', &home, 1)
+}
