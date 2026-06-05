@@ -82,7 +82,7 @@ pub fn do_restore(backup_dir: &str, dest_dir: &str, auto: bool) -> anyhow::Resul
     // Config
     if Path::new(&format!("{}/config", bd)).is_dir() {
         let (a, b) = (bd.clone(), dd.clone());
-        items.push(("config".into(), "Restore ~/.config".into(), Some(Box::new(move || { let _ = run(&format!("rclone copy '{}/config/' '{}/.config/' --checkers {}", a, b, ck)); }))));
+        items.push(("config".into(), "Restore ~/.config".into(), Some(Box::new(move || { let _ = copy_progress(&format!("{}/config/", a), &format!("{}/.config/", b), ck, false, &[]); }))));
     }
 
     // Browser profiles
@@ -91,7 +91,7 @@ pub fn do_restore(backup_dir: &str, dest_dir: &str, auto: bool) -> anyhow::Resul
         if Path::new(&p).is_dir() {
             let (src, dst) = (p.clone(), dd.clone());
             let rd = src_rel.to_string();
-            items.push((format!("browser-{}", name), format!("Restore {}", name), Some(Box::new(move || { let _ = run(&format!("rclone copy '{}/' '{}/{}/' --checkers {} 2>/dev/null", src, dst, rd, ck)); }))));
+            items.push((format!("browser-{}", name), format!("Restore {}", name), Some(Box::new(move || { let _ = copy_progress(&format!("{}/", src), &format!("{}/{}/", dst, rd), ck, false, &[]); }))));
         }
     }
 
@@ -101,7 +101,7 @@ pub fn do_restore(backup_dir: &str, dest_dir: &str, auto: bool) -> anyhow::Resul
         if Path::new(&p).is_dir() {
             let (src, dst) = (p.clone(), dd.clone());
             let n = name.to_string();
-            items.push((name.trim_start_matches('.').to_string(), format!("Restore ~/{}", name), Some(Box::new(move || { let _ = run(&format!("rclone copy '{}/' '{}/{}/' --checkers {} 2>/dev/null", src, dst, n, ck)); }))));
+            items.push((name.trim_start_matches('.').to_string(), format!("Restore ~/{}", name), Some(Box::new(move || { let _ = copy_progress(&format!("{}/", src), &format!("{}/{}/", dst, n), ck, false, &[]); }))));
         }
     }
 
@@ -109,20 +109,20 @@ pub fn do_restore(backup_dir: &str, dest_dir: &str, auto: bool) -> anyhow::Resul
     let keyrings = format!("{}/keyrings", bd);
     if Path::new(&keyrings).is_dir() {
         let (src, dst) = (keyrings.clone(), dd.clone());
-        items.push(("keyrings".into(), "Restore keyrings (~/.local/share/keyrings)".into(), Some(Box::new(move || { let _ = run(&format!("rclone copy '{}/' '{}/.local/share/keyrings/' --checkers {} 2>/dev/null", src, dst, ck)); }))));
+        items.push(("keyrings".into(), "Restore keyrings (~/.local/share/keyrings)".into(), Some(Box::new(move || { let _ = copy_progress(&format!("{}/", src), &format!("{}/.local/share/keyrings/", dst), ck, false, &[]); }))));
     }
 
     // VM configs
     let vm_qemu = format!("{}/virt-manager/qemu", bd);
     if Path::new(&vm_qemu).is_dir() {
         let d = bd.clone();
-        items.push(("vm-configs".into(), "Restore libvirt VM configs (/etc/libvirt/qemu)".into(), Some(Box::new(move || { let _ = run(&format!("sudo rclone copy '{}/virt-manager/qemu/' /etc/libvirt/qemu/ --checkers {} 2>/dev/null", d, ck)); }))));
+        items.push(("vm-configs".into(), "Restore libvirt VM configs (/etc/libvirt/qemu)".into(), Some(Box::new(move || { let _ = copy_progress(&format!("{}/virt-manager/qemu/", d), "/etc/libvirt/qemu/", ck, true, &[]); }))));
     }
     // VM images
     let vm_images = format!("{}/virt-manager/images", bd);
     if Path::new(&vm_images).is_dir() {
         let src = vm_images.clone();
-        items.push(("vm-images".into(), "Restore VM disk images (/var/lib/libvirt/images)".into(), Some(Box::new(move || { let _ = run(&format!("sudo rclone copy '{}/' /var/lib/libvirt/images/ --checkers {} 2>/dev/null", src, ck)); }))));
+        items.push(("vm-images".into(), "Restore VM disk images (/var/lib/libvirt/images)".into(), Some(Box::new(move || { let _ = copy_progress(&format!("{}/", src), "/var/lib/libvirt/images/", ck, true, &[]); }))));
     }
 
     // Home subdirectories
@@ -134,7 +134,7 @@ pub fn do_restore(backup_dir: &str, dest_dir: &str, auto: bool) -> anyhow::Resul
                     let sub = entry.file_name().to_string_lossy().to_string();
                     let (a, b) = (bd.clone(), dd.clone());
                     let s = sub.clone();
-                    items.push((format!("home-{}", sub), format!("Restore ~/{}", sub), Some(Box::new(move || { let _ = run(&format!("rclone copy '{}/home/{}/' '{}/{}/' --checkers {} 2>/dev/null", a, s, b, s, ck)); }))));
+                    items.push((format!("home-{}", sub), format!("Restore ~/{}", sub), Some(Box::new(move || { let _ = copy_progress(&format!("{}/home/{}/", a, s), &format!("{}/{}/", b, s), ck, false, &[]); }))));
                 }
             }
         }
@@ -150,7 +150,7 @@ pub fn do_restore(backup_dir: &str, dest_dir: &str, auto: bool) -> anyhow::Resul
                     let (a, b) = (bd.clone(), dd.clone());
                     let n = name.clone();
                     items.push((format!("extra-{}", name), format!("Restore extra/{}", name), Some(Box::new(move || {
-                        let _ = run(&format!("rclone copy '{}/extra/{}/' '{}/' --checkers {} 2>/dev/null", a, n, b, ck));
+                        let _ = copy_progress(&format!("{}/extra/{}/", a, n), &format!("{}/", b), ck, false, &[]);
                     }))));
                 }
             }
