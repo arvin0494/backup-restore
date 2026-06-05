@@ -66,20 +66,15 @@ pub fn estimate_home_size() -> u64 {
 pub fn backup_config(dest: &str, ck: u32) {
     e("Backing up configs");
     let cfg_dest = format!("{}/config", dest);
-    let _ = std::fs::create_dir_all(&cfg_dest);
 
-    let excludes: Vec<String> = CACHE_EXCLUDES.iter()
-        .chain(CONFIG_EXCLUDES.iter())
-        .map(|x| format!("--exclude '{}'", x))
-        .collect();
-    let ex = excludes.join(" ");
-
+    let mut extra_args: Vec<&str> = Vec::new();
+    for &x in CACHE_EXCLUDES.iter().chain(CONFIG_EXCLUDES.iter()) {
+        extra_args.push("--exclude");
+        extra_args.push(x);
+    }
     let home = crate::HOME.get().unwrap();
     e(&format!("  {}.config{} → ...", W, N));
-    let _ = copy_progress(
-        &format!("rclone copy ~/.config/ '{}/' {}", cfg_dest, ex),
-        ck, true, true, false,
-    );
+    let _ = copy_progress("~/.config/", &cfg_dest, ck, false, &extra_args);
 
     for item in &[".ssh", ".gnupg", ".local/share/keyrings"] {
         let src = format!("{}/{}", home, item);
@@ -93,13 +88,12 @@ pub fn backup_config(dest: &str, ck: u32) {
 pub fn backup_browsers(dest: &str, ck: u32) {
     e("Backing up browser data");
     let b_dest = format!("{}/browser", dest);
-    let _ = std::fs::create_dir_all(&b_dest);
 
-    let bx: Vec<String> = CACHE_EXCLUDES.iter()
-        .chain(BROWSER_EXCLUDES.iter())
-        .map(|x| format!("--exclude '{}'", x))
-        .collect();
-    let bx = bx.join(" ");
+    let mut extra_args: Vec<&str> = Vec::new();
+    for &x in CACHE_EXCLUDES.iter().chain(BROWSER_EXCLUDES.iter()) {
+        extra_args.push("--exclude");
+        extra_args.push(x);
+    }
     let home = crate::HOME.get().unwrap();
 
     let manifest_path = config::manifest_path();
@@ -118,8 +112,9 @@ pub fn backup_browsers(dest: &str, ck: u32) {
         }
         e(&format!("  {}{}{} → ...", W, name, N));
         let _ = copy_progress(
-            &format!("rclone copy '{}/' '{}/{}/' {}", src, b_dest, name, bx),
-            ck, true, true, false,
+            &format!("{}/", src),
+            &format!("{}/{}/", b_dest, name),
+            ck, false, &extra_args,
         );
         manifest.insert(name.to_string(), mtime);
         changed += 1;
@@ -141,27 +136,21 @@ pub fn backup_vm(dest: &str, ck: u32) {
     }
     if Path::new(VM_IMAGES_SRC).is_dir() {
         e(&format!("  {}VM disk images{} → ...", W, N));
-        let _ = copy_progress(
-            &format!("sudo rclone copy '{}/' '{}/images/' --inplace", VM_IMAGES_SRC, vm_dest),
-            ck, true, false, true,
-        );
+        let _ = copy_progress(VM_IMAGES_SRC, &format!("{}/images/", vm_dest), ck, true, &["--inplace"]);
     }
 }
 
 pub fn backup_home(dest: &str, ck: u32) {
     e("Backing up home data");
     let home_dest = format!("{}/home", dest);
-    let _ = std::fs::create_dir_all(&home_dest);
 
-    let hx: Vec<String> = HOME_EXCLUDES.iter()
-        .map(|x| format!("--exclude '{}'", x))
-        .collect();
-    let hx = hx.join(" ");
+    let mut extra_args: Vec<&str> = vec!["--links"];
+    for &x in HOME_EXCLUDES.iter() {
+        extra_args.push("--exclude");
+        extra_args.push(x);
+    }
     e(&format!("  {}~{}{} → ...", W, N, N));
-    let _ = copy_progress(
-        &format!("sudo rclone copy ~/ '{}' --links --inplace {}", home_dest, hx),
-        ck, false, false, true,
-    );
+    let _ = copy_progress("~/", &home_dest, ck, true, &extra_args);
 }
 
 pub fn backup_extra(dest: &str, ck: u32) {
@@ -191,10 +180,7 @@ pub fn backup_extra(dest: &str, ck: u32) {
         }
         let target = format!("{}/{}", extra_dest, name);
         e(&format!("  {}{}{} → ...", W, name, N));
-        let _ = copy_progress(
-            &format!("rclone copy '{}/' '{}/'", src, target),
-            ck, false, false, true,
-        );
+        let _ = copy_progress(&src, &target, ck, false, &[]);
         manifest.insert(name, mtime);
         changed += 1;
     }

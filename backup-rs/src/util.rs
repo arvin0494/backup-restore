@@ -116,28 +116,32 @@ pub fn run_stdout(cmd: &str) -> String {
 }
 
 pub fn copy_progress(
-    base_cmd: &str,
+    src: &str,
+    dst: &str,
     checkers: u32,
-    ntfs: bool,
-    skip_links: bool,
-    no_traverse: bool,
+    sudo: bool,
+    extra_args: &[&str],
 ) -> anyhow::Result<i32> {
-    let mut extra = String::new();
-    if ntfs { extra.push_str(" --ignore-errors"); }
-    if skip_links { extra.push_str(" --skip-links"); }
-    if no_traverse { extra.push_str(" --no-traverse"); }
-    extra.push_str(" --fast-list --buffer-size=64M");
-    let full = format!(
-        "{} --progress --checkers {} --transfers {}{}",
-        base_cmd, checkers, checkers, extra,
-    );
+    let _ = std::fs::create_dir_all(dst);
 
-    let status = Command::new("sh")
-        .arg("-c").arg(&full)
-        .stdin(Stdio::null())
+    let program = if sudo { "sudo" } else { "rclone" };
+    let mut args: Vec<String> = Vec::with_capacity(10 + extra_args.len());
+    if sudo {
+        args.push("rclone".into());
+    }
+    args.push("copy".into());
+    args.push(src.into());
+    args.push(dst.into());
+    args.push("--progress".into());
+    args.push("--stats=1s".into());
+    args.push(format!("--checkers={}", checkers));
+    args.push(format!("--transfers={}", checkers));
+    args.extend(extra_args.iter().map(|a| a.to_string()));
+
+    let status = Command::new(program)
+        .args(&args)
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
-        .current_dir(std::env::temp_dir())
         .status()?;
 
     Ok(status.code().unwrap_or(-1))
