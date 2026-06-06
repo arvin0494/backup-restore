@@ -7,7 +7,7 @@ Backup your Linux system before reinstalling, then restore everything after.
 - **Package lists** — pacman official, AUR (yay), flatpak, snap
 - **Configs** — `~/.config`, `~/.ssh`, `~/.gnupg`, keyrings (caches/trash excluded)
 - **Browser data** — Firefox, Chromium, Chrome, Brave (profiles, caches excluded)
-- **Home data** — full `~/` via `sudo rclone` (excludes `.cache`, `node_modules`, etc.)
+- **Home data** — full `~/` via `sudo rclone` (excludes `.cache`, `node_modules`, `Games/`, etc.)
 - **Size estimation** — `gdu` scans home subdirs in parallel with package lists
 - **Virt-manager** — libvirt VM configs (`/etc/libvirt/qemu`) and disk images (`/var/lib/libvirt/images`)
 - **Auto-detect path** — `/mnt/HDD4T/BACKUP/{hostname}[-{os_id}]`
@@ -107,5 +107,6 @@ Or re-run the curl one-liner to reinstall.
 - `sudo` is required for home backup (permissions, symlinks) and VM data
 - NTFS destination: uses `--inplace` to avoid ENOSPC from ntfs-3g temp files; if ENOSPC occurs, run `sudo ntfsfix /dev/sda1`
 - `.steam` and `.var` are intentionally kept in home backup (user data, not cache)
+- `Games/` is excluded from home backup — use [`backup-games`](https://github.com/arvin0494/backup-games) separately for game data
 - gdu estimation scans home directories (Documents, Pictures, Projects, etc.) ignoring `.cache`, `node_modules`, etc.
 - Incomplete backups (missing `.complete` marker) are auto-cleaned on next run
