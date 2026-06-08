@@ -1,44 +1,59 @@
+// ─────────────────────────────────────────────────────────────
+// MAIN ENTRY POINT — this is where the program starts
+// ─────────────────────────────────────────────────────────────
+// When you run "bckup" in the terminal, this file decides what
+// to do: run a backup, run a restore, or show a menu.
+// ─────────────────────────────────────────────────────────────
+
 use std::sync::OnceLock;
 use std::io::Write;
 
-mod backup;
-mod config;
-mod restore;
-mod util;
+// These "mod" lines load the other code files (modules) in the
+// src/ folder. Each one handles a different job.
+mod backup;   // 📦  backup  — saves your files to a safe place
+mod config;   // ⚙️  config  — reads your settings from disk
+mod restore;  // 🔄  restore — brings your files back
+mod util;     // 🛠️  util    — helper tools used everywhere
 
+// A place to store your home folder path (~/) so every part of
+// the program can use it.
 pub static HOME: OnceLock<String> = OnceLock::new();
 
+// ── MAIN ───────────────────────────────────────────────────
+// This runs automatically when you type "bckup" in the terminal.
 fn main() -> anyhow::Result<()> {
+    // Remember the home folder (e.g., /home/yourname)
     HOME.get_or_init(|| std::env::var("HOME").unwrap_or_else(|_| "/root".into()));
 
     use clap::Parser;
 
+    // Define the command-line flags the user can pass:
+    //   bckup -b       → backup
+    //   bckup -r       → restore
+    //   bckup -y       → auto-confirm everything
     #[derive(Parser)]
     #[command(name = "backup", version, about = "Backup & restore for Linux reinstall")]
     struct Cli {
-        /// Backup to DIR (auto-detect if no value)
         #[arg(short = 'b', long = "backup")]
-        backup: Option<Option<String>>,
+        backup: Option<Option<String>>,   // "-b" flag for backup
 
-        /// Restore from backup DIR
         #[arg(short = 'r', long = "restore")]
-        restore: Option<Option<String>>,
+        restore: Option<Option<String>>,  // "-r" flag for restore
 
-        /// Backup target or restore destination
         #[arg(value_hint = clap::ValueHint::DirPath)]
-        dest: Option<String>,
+        dest: Option<String>,             // an optional folder path
 
-        /// Skip prompts, select all
         #[arg(short = 'y', long = "yes")]
-        yes: bool,
+        yes: bool,                        // "-y" to skip questions
     }
 
+    // Read what the user typed on the command line
     let cli = Cli::parse();
 
-    // Auto-install deps
+    // Make sure rclone, gdu, and fzf are installed
     util::install_deps();
 
-    // No flags → default to backup
+    // If no flags were given, run the interactive menu (default = backup)
     if cli.backup.is_none() && cli.restore.is_none() {
         let dest = cli.dest.unwrap_or_else(util::detect_path);
         match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -53,7 +68,7 @@ fn main() -> anyhow::Result<()> {
         return Ok(());
     }
 
-    // Restore
+    // Restore mode — bring files back from a backup
     if let Some(val) = cli.restore {
         let backup_dir = match val {
             Some(v) => v,
@@ -78,7 +93,7 @@ fn main() -> anyhow::Result<()> {
         return Ok(());
     }
 
-    // Backup
+    // Backup mode — save files to a safe location
     if let Some(val) = cli.backup {
         let dest = match val {
             Some(v) => v,

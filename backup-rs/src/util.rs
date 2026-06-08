@@ -1,10 +1,24 @@
+// ─────────────────────────────────────────────────────────────
+// UTILITIES — helper tools used by the rest of the program
+// ─────────────────────────────────────────────────────────────
+// This file provides small reusable pieces:
+// - log file writing
+// - colored text for the terminal
+// - running commands
+// - copying files with progress
+// - detecting backup paths and drive types
+// - installing missing dependencies
+// ─────────────────────────────────────────────────────────────
+
 use std::collections::HashMap;
 use std::io::Write;
 use std::path::Path;
 use std::process::{Command, Output, Stdio};
 use std::sync::{Mutex, OnceLock};
 
-/// Global log file path, set at backup start.
+// ── LOGGING ─────────────────────────────────────────────────
+// Writes messages to a log file (backup.log) so you can review
+// what happened after the backup finishes.
 pub static LOG_FILE: OnceLock<Mutex<String>> = OnceLock::new();
 pub fn init_log(path: String) { let _ = LOG_FILE.set(Mutex::new(path)); }
 
@@ -18,6 +32,10 @@ pub fn log_append(s: &str) {
     }
 }
 
+// ── TERMINAL COLORS ────────────────────────────────────────
+// These variables let the program print text in different
+// colors in the terminal (red, green, yellow, cyan, white, bold).
+// The "N" variable resets the color back to normal.
 pub static R: &str = "\x1b[0;31m";
 pub static G: &str = "\x1b[0;32m";
 pub static Y: &str = "\x1b[0;33m";
@@ -26,11 +44,17 @@ pub static W: &str = "\x1b[1;37m";
 pub static BOLD: &str = "\x1b[1m";
 pub static N: &str = "\x1b[0m";
 
+// ── PRINT MESSAGE ─────────────────────────────────────────
+// Shows a message in the terminal (with a "[*]" prefix) and
+// also writes it to the log file (with colors stripped out).
 pub fn e(msg: &str) {
     println!("{BOLD}[{G}*{N}{BOLD}]{N} {msg}");
     log_append(&strip_ansi(msg));
 }
 
+// ── DIRECTORY MODIFICATION TIME ────────────────────────────
+// Gets the last-modified timestamp of a folder. Used to check
+// whether a folder has changed since the last backup.
 pub fn dir_mtime(path: &str) -> Option<u64> {
     std::fs::metadata(path).ok()?
         .modified().ok()?
@@ -38,6 +62,10 @@ pub fn dir_mtime(path: &str) -> Option<u64> {
         .map(|d| d.as_secs())
 }
 
+// ── MANIFEST FILE HELPERS ──────────────────────────────────
+// The manifest is a simple text file that records when each
+// folder was last backed up. On the next run, folders whose
+// modification time hasn't changed can be skipped (faster).
 pub fn load_manifest(path: &str) -> HashMap<String, u64> {
     let mut map = HashMap::new();
     let content = std::fs::read_to_string(path).unwrap_or_default();
@@ -65,6 +93,8 @@ pub fn save_manifest(path: &str, map: &HashMap<String, u64>) -> anyhow::Result<(
     Ok(())
 }
 
+// ── STRIP ANSI COLORS ──────────────────────────────────────
+// Removes color codes from text before writing to the log file.
 fn strip_ansi(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     let mut chars = s.chars();
@@ -84,14 +114,22 @@ fn strip_ansi(s: &str) -> String {
     out
 }
 
+// ── RUN COMMAND ────────────────────────────────────────────
+// Runs any shell command and returns the result (output + status).
 pub fn run(cmd: &str) -> anyhow::Result<Output> {
     Ok(Command::new("sh").arg("-c").arg(cmd).output()?)
 }
 
+// ── RUN AND CHECK SUCCESS ──────────────────────────────────
+// Runs a command and returns true/false depending on whether
+// it succeeded (e.g., "which rclone" → does rclone exist?).
 pub fn run_ok(cmd: &str) -> bool {
     Command::new("sh").arg("-c").arg(cmd).output().is_ok_and(|o| o.status.success())
 }
 
+// ── RUN WITH INPUT ─────────────────────────────────────────
+// Runs a command, sends it some text as input, and returns
+// whatever the command prints out (used for fzf selection).
 pub fn run_stdin(cmd: &str, input: &str) -> anyhow::Result<String> {
     let mut child = Command::new("sh")
         .arg("-c").arg(cmd)
@@ -104,6 +142,9 @@ pub fn run_stdin(cmd: &str, input: &str) -> anyhow::Result<String> {
     Ok(String::from_utf8_lossy(&out.stdout).to_string())
 }
 
+// ── RUN AND GET OUTPUT ─────────────────────────────────────
+// Runs a command and returns whatever it printed to the screen
+// (or an empty string if it failed).
 pub fn run_stdout(cmd: &str) -> String {
     Command::new("sh")
         .arg("-c").arg(cmd)
@@ -115,6 +156,10 @@ pub fn run_stdout(cmd: &str) -> String {
         .unwrap_or_default()
 }
 
+// ── COPY WITH PROGRESS ─────────────────────────────────────
+// Uses "rclone copy" to copy files from one place to another.
+// Shows progress on screen (speed, ETA, file names).
+// If sudo is needed (for system folders), it runs rclone via sudo.
 pub fn copy_progress(
     src: &str,
     dst: &str,
@@ -147,13 +192,19 @@ pub fn copy_progress(
     Ok(status.code().unwrap_or(-1))
 }
 
+// ── FORMAT SIZE ────────────────────────────────────────────
+// Converts a raw byte count into a human-readable format
+// (e.g., "1.5 GiB" instead of "1610612736").
 pub fn fmt(size: u64) -> String {
-    // Try numfmt first
     let out = run_stdout(&format!("numfmt --to=iec {}", size));
     if !out.is_empty() { return out; }
     format!("{} MiB", size / 1024 / 1024)
 }
 
+// ── DETECT BACKUP PATH ─────────────────────────────────────
+// Automatically figures out the backup destination:
+//   /mnt/HDD4T/BACKUP/{computer-name}[-{os-name}]
+// It uses the computer's hostname and the Linux distro name.
 pub fn detect_path() -> String {
     let host = run_stdout("hostname -s");
     let host = if host.is_empty() { "unknown".into() } else { host };
@@ -166,6 +217,12 @@ pub fn detect_path() -> String {
     format!("{}/{}{}", crate::config::backup_base(), host, tag)
 }
 
+// ── DETECT DRIVE TYPE ──────────────────────────────────────
+// Figures out whether the backup drive is:
+//   - HDD (slow, 3 parallel transfers)
+//   - SSD (fast, 8 parallel transfers)
+//   - NVMe (very fast, 16 parallel transfers)
+// This tunes the copy speed to avoid overwhelming the drive.
 pub fn detect_checkers(path: &str) -> u32 {
     let out = run_stdout(&format!(
         "lsblk -ndo rota $(findmnt -T '{}' -o SOURCE | tail -1) 2>/dev/null",
@@ -173,7 +230,6 @@ pub fn detect_checkers(path: &str) -> u32 {
     ));
     match out.as_str() {
         "0" => {
-            // Check if NVMe
             let name = run_stdout(&format!(
                 "lsblk -ndo pkname $(findmnt -T '{}' -o SOURCE | tail -1) 2>/dev/null",
                 path
@@ -184,6 +240,10 @@ pub fn detect_checkers(path: &str) -> u32 {
     }
 }
 
+// ── INSTALL DEPENDENCIES ───────────────────────────────────
+// Checks whether rclone, gdu, and fzf are installed. If not,
+// installs them using the system's package manager (pacman,
+// apt-get, dnf, zypper, or apk). Runs automatically at startup.
 pub fn install_deps() -> bool {
     let (pm, pkgs): (&str, Vec<&str>) = if run_ok("which pacman") {
         ("sudo pacman -S --noconfirm", vec!["rclone", "gdu", "fzf"])

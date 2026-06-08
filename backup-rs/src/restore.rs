@@ -1,10 +1,22 @@
+// ─────────────────────────────────────────────────────────────
+// RESTORE — brings your files and programs back from a backup
+// ─────────────────────────────────────────────────────────────
+// When you run "bckup -r", this file takes over. It:
+// - shows you what's available in the backup
+// - lets you choose what to restore (packages, configs, files)
+// - copies everything back to where it belongs
+// ─────────────────────────────────────────────────────────────
+
 use crate::config::BROWSERS;
 use crate::util::*;
 use std::io::Write;
 use std::path::Path;
 
+// Each item the user can restore has a key (internal name),
+// a human-readable label, and an action (what to actually do).
 type Item = (String, String, Option<Box<dyn FnOnce()>>);
 
+// ── DO RESTORE (main function) ─────────────────────────────
 pub fn do_restore(backup_dir: &str, dest_dir: &str, auto: bool) -> anyhow::Result<()> {
     let backup_dir = std::path::absolute(backup_dir)?;
     let dest_dir = std::path::absolute(dest_dir)?;
@@ -25,8 +37,12 @@ pub fn do_restore(backup_dir: &str, dest_dir: &str, auto: bool) -> anyhow::Resul
     let dd = dest_dir.to_string_lossy().to_string();
     let mut items: Vec<Item> = Vec::new();
 
-    // Package lists — distro-agnostic
-    // Arch
+    // ── PACKAGE LISTS ──────────────────────────────────────
+    // If the backup has a list of installed programs, offer to
+    // reinstall them. The code checks which Linux system you're
+    // on (Arch, Debian, Fedora, etc.) and uses the right tool.
+
+    // Arch Linux official packages
     let pac_off = format!("{}/packages-pacman-official.txt", bd);
     let pac_off_old = format!("{}/pacman-official.txt", bd);
     if (Path::new(&pac_off).exists() || Path::new(&pac_off_old).exists()) && run_ok("which pacman") {
@@ -36,6 +52,7 @@ pub fn do_restore(backup_dir: &str, dest_dir: &str, auto: bool) -> anyhow::Resul
             let _ = run(&format!("sudo pacman -S --needed - < '{}/{}'", d, f));
         }))));
     }
+    // Arch AUR packages (via yay)
     let pac_aur = format!("{}/packages-aur.txt", bd);
     let pac_aur_old = format!("{}/pacman-aur.txt", bd);
     if (Path::new(&pac_aur).exists() || Path::new(&pac_aur_old).exists()) && run_ok("which yay") {
@@ -45,47 +62,50 @@ pub fn do_restore(backup_dir: &str, dest_dir: &str, auto: bool) -> anyhow::Resul
             let _ = run(&format!("yay -S --needed - < '{}/{}'", d, f));
         }))));
     }
-    // Debian / Ubuntu
+    // Debian / Ubuntu packages
     if Path::new(&format!("{}/packages-dpkg.txt", bd)).exists() && run_ok("which dpkg") {
         let d = bd.clone();
         items.push(("dpkg-pkgs".into(), "Install packages (dpkg/apt)".into(), Some(Box::new(move || {
             let _ = run(&format!("sudo apt-get update && sudo apt-get install -y $(awk '{{print $1}}' '{}/packages-dpkg.txt')", d));
         }))));
     }
-    // Fedora
+    // Fedora packages
     if Path::new(&format!("{}/packages-dnf.txt", bd)).exists() && run_ok("which dnf") {
         let d = bd.clone();
         items.push(("dnf-pkgs".into(), "Install packages (dnf)".into(), Some(Box::new(move || {
             let _ = run(&format!("sudo dnf install -y $(cat '{}/packages-dnf.txt')", d));
         }))));
     }
-    // openSUSE
+    // openSUSE packages
     if Path::new(&format!("{}/packages-zypper.txt", bd)).exists() && run_ok("which zypper") {
         let d = bd.clone();
         items.push(("zypper-pkgs".into(), "Install packages (zypper)".into(), Some(Box::new(move || {
             let _ = run(&format!("sudo zypper install -y $(cat '{}/packages-zypper.txt')", d));
         }))));
     }
-    // Alpine
+    // Alpine Linux packages
     if Path::new(&format!("{}/packages-apk.txt", bd)).exists() && run_ok("which apk") {
         let d = bd.clone();
         items.push(("apk-pkgs".into(), "Install packages (apk)".into(), Some(Box::new(move || {
             let _ = run(&format!("sudo apk add $(cat '{}/packages-apk.txt')", d));
         }))));
     }
-    // Cross-platform
+    // Flatpak apps
     if Path::new(&format!("{}/flatpak-list.txt", bd)).exists() && run_ok("which flatpak") {
         let d = bd.clone();
         items.push(("flatpaks".into(), "Install Flatpaks".into(), Some(Box::new(move || { let _ = run(&format!("xargs flatpak install -y < '{}/flatpak-list.txt'", d)); }))));
     }
 
-    // Config
+    // ── CONFIG FILES ───────────────────────────────────────
+    // Restore ~/.config (your desktop environment settings,
+    // terminal configs, and other program settings).
     if Path::new(&format!("{}/config", bd)).is_dir() {
         let (a, b) = (bd.clone(), dd.clone());
         items.push(("config".into(), "Restore ~/.config".into(), Some(Box::new(move || { let _ = copy_progress(&format!("{}/config/", a), &format!("{}/.config/", b), ck, false, &[]); }))));
     }
 
-    // Browser profiles
+    // ── BROWSER PROFILES ───────────────────────────────────
+    // Restore Firefox, Chromium, Chrome, and Brave profiles.
     for (src_rel, name) in BROWSERS {
         let p = format!("{}/browser/{}", bd, name);
         if Path::new(&p).is_dir() {
@@ -95,7 +115,9 @@ pub fn do_restore(backup_dir: &str, dest_dir: &str, auto: bool) -> anyhow::Resul
         }
     }
 
-    // SSH keys & GPG
+    // ── SSH KEYS & GPG ─────────────────────────────────────
+    // Restore your SSH keys (for GitHub, servers) and GPG keys
+    // (for signing commits and decrypting files).
     for name in &[".ssh", ".gnupg"] {
         let p = format!("{}/{}", bd, name);
         if Path::new(&p).is_dir() {
@@ -105,27 +127,31 @@ pub fn do_restore(backup_dir: &str, dest_dir: &str, auto: bool) -> anyhow::Resul
         }
     }
 
-    // Keyrings
+    // ── KEYRINGS ───────────────────────────────────────────
+    // Restore your password keyrings (stored passwords).
     let keyrings = format!("{}/keyrings", bd);
     if Path::new(&keyrings).is_dir() {
         let (src, dst) = (keyrings.clone(), dd.clone());
         items.push(("keyrings".into(), "Restore keyrings (~/.local/share/keyrings)".into(), Some(Box::new(move || { let _ = copy_progress(&format!("{}/", src), &format!("{}/.local/share/keyrings/", dst), ck, false, &[]); }))));
     }
 
-    // VM configs
+    // ── VIRTUAL MACHINE CONFIGS ────────────────────────────
+    // Restore libvirt VM settings (virtual machine definitions).
     let vm_qemu = format!("{}/virt-manager/qemu", bd);
     if Path::new(&vm_qemu).is_dir() {
         let d = bd.clone();
         items.push(("vm-configs".into(), "Restore libvirt VM configs (/etc/libvirt/qemu)".into(), Some(Box::new(move || { let _ = copy_progress(&format!("{}/virt-manager/qemu/", d), "/etc/libvirt/qemu/", ck, true, &[]); }))));
     }
-    // VM images
+    // VM disk images
     let vm_images = format!("{}/virt-manager/images", bd);
     if Path::new(&vm_images).is_dir() {
         let src = vm_images.clone();
         items.push(("vm-images".into(), "Restore VM disk images (/var/lib/libvirt/images)".into(), Some(Box::new(move || { let _ = copy_progress(&format!("{}/", src), "/var/lib/libvirt/images/", ck, true, &[]); }))));
     }
 
-    // Home subdirectories
+    // ── HOME SUBDIRECTORIES ────────────────────────────────
+    // Restore individual folders from your home directory
+    // (Documents, Pictures, Projects, etc.).
     let home_src = format!("{}/home", bd);
     if Path::new(&home_src).is_dir() {
         if let Ok(entries) = std::fs::read_dir(&home_src) {
@@ -140,7 +166,8 @@ pub fn do_restore(backup_dir: &str, dest_dir: &str, auto: bool) -> anyhow::Resul
         }
     }
 
-    // Extra directories
+    // ── EXTRA DIRECTORIES ──────────────────────────────────
+    // Restore any extra folders the user configured.
     let extra_src = format!("{}/extra", bd);
     if Path::new(&extra_src).is_dir() {
         if let Ok(entries) = std::fs::read_dir(&extra_src) {
@@ -163,7 +190,9 @@ pub fn do_restore(backup_dir: &str, dest_dir: &str, auto: bool) -> anyhow::Resul
     }
     e(&format!("Found {} item(s) to restore", items.len()));
 
-    // Selection
+    // ── SELECTION ──────────────────────────────────────────
+    // Show the user a menu (or use fzf for a prettier list)
+    // to pick which items to restore.
     let keys: Vec<String> = items.iter().map(|(k, _, _)| k.clone()).collect();
     let labels: Vec<&str> = items.iter().map(|(_, l, _)| l.as_str()).collect();
 
@@ -223,7 +252,8 @@ pub fn do_restore(backup_dir: &str, dest_dir: &str, auto: bool) -> anyhow::Resul
         }
     }
 
-    // Execute each selected item
+    // ── EXECUTE ────────────────────────────────────────────
+    // Actually run each selected restore action.
     for &i in &chosen {
         if let Some((key, _, ref mut cb_opt)) = items.get_mut(i) {
             e(&format!("  {}{}{} → ...", W, key, N));

@@ -1,3 +1,12 @@
+// ─────────────────────────────────────────────────────────────
+// BACKUP — saves your files and programs to a safe location
+// ─────────────────────────────────────────────────────────────
+// This file handles everything about creating a backup:
+// - listing installed programs
+// - estimating how big your files are
+// - copying configs, browsers, VMs, and home folders
+// ─────────────────────────────────────────────────────────────
+
 use crate::config;
 use crate::config::*;
 use crate::util::*;
@@ -6,6 +15,10 @@ use std::path::Path;
 use std::process::Command;
 use std::thread;
 
+// ── ESTIMATE SIZE ──────────────────────────────────────────
+// Asks "gdu" (a disk-usage tool) how big a folder is,
+// while ignoring directories the user probably doesn't want
+// to back up (like .cache or node_modules).
 pub fn gdu_size(path: &str, ignore: &str) -> u64 {
     Command::new("sh")
         .arg("-c")
@@ -22,6 +35,11 @@ pub fn gdu_size(path: &str, ignore: &str) -> u64 {
         .parse::<u64>().unwrap_or(0)
 }
 
+// ── SAVE PACKAGE LISTS ─────────────────────────────────────
+// Writes out a list of all installed programs so they can be
+// reinstalled later. Supports many Linux families:
+//   Arch (pacman, AUR), Debian/Ubuntu (dpkg), Fedora (dnf),
+//   openSUSE (zypper), Alpine (apk), Flatpak, and Snap.
 pub fn save_package_lists(dest: &str) {
     e("Saving package lists");
     let commands = [
@@ -39,6 +57,10 @@ pub fn save_package_lists(dest: &str) {
     }
 }
 
+// ── ESTIMATE HOME SIZE ─────────────────────────────────────
+// Scans common folders in your home directory (~/Documents,
+// ~/Pictures, ~/Projects, etc.) and adds up their sizes so
+// you know how much space the backup will need.
 pub fn estimate_home_size() -> u64 {
     if !run_ok("which gdu") {
         return 0;
@@ -63,6 +85,9 @@ pub fn estimate_home_size() -> u64 {
     total
 }
 
+// ── BACKUP CONFIGS ─────────────────────────────────────────
+// Copies your settings (~/.config, ~/.ssh, ~/.gnupg, keyrings)
+// to the backup folder. Skips caches and trash to save space.
 pub fn backup_config(dest: &str, ck: u32) {
     e("Backing up configs");
     let cfg_dest = format!("{}/config", dest);
@@ -85,6 +110,10 @@ pub fn backup_config(dest: &str, ck: u32) {
     }
 }
 
+// ── BACKUP BROWSERS ────────────────────────────────────────
+// Copies Firefox, Chromium, Chrome, and Brave profiles.
+// Only backs up profiles that changed since the last backup
+// (saves time by skipping unchanged ones).
 pub fn backup_browsers(dest: &str, ck: u32) {
     e("Backing up browser data");
     let b_dest = format!("{}/browser", dest);
@@ -125,6 +154,9 @@ pub fn backup_browsers(dest: &str, ck: u32) {
     }
 }
 
+// ── BACKUP VIRTUAL MACHINES ────────────────────────────────
+// Saves libvirt VM configuration files and disk images
+// (if you use virt-manager / KVM / QEMU).
 pub fn backup_vm(dest: &str, ck: u32) {
     e("Backing up VM data");
     let vm_dest = format!("{}/virt-manager", dest);
@@ -140,6 +172,10 @@ pub fn backup_vm(dest: &str, ck: u32) {
     }
 }
 
+// ── BACKUP HOME FOLDER ─────────────────────────────────────
+// Copies your entire home folder (~/), but excludes things
+// that don't need backing up: caches, trash, node_modules,
+// game installs, build artifacts, etc.
 pub fn backup_home(dest: &str, ck: u32) {
     e("Backing up home data");
     let home_dest = format!("{}/home", dest);
@@ -153,6 +189,9 @@ pub fn backup_home(dest: &str, ck: u32) {
     let _ = copy_progress("~/", &home_dest, ck, true, &extra_args);
 }
 
+// ── BACKUP EXTRA DIRECTORIES ───────────────────────────────
+// Copies any extra folders the user specified in the config
+// file (BACKUP_EXTRA_DIRS). Skips unchanged ones.
 pub fn backup_extra(dest: &str, ck: u32) {
     let dirs = extra_backup_dirs();
     if dirs.is_empty() { return; }
@@ -190,6 +229,14 @@ pub fn backup_extra(dest: &str, ck: u32) {
     }
 }
 
+// ── DO BACKUP (main function) ──────────────────────────────
+// This is the main backup routine. It:
+//   1. Checks the backup drive is plugged in
+//   2. Creates the destination folder
+//   3. Saves package lists and estimates size (in parallel)
+//   4. Backs up configs, browsers, VMs, home, extra dirs
+//   5. Writes a ".complete" marker so we know it finished
+//   6. Shows the final size and location
 pub fn do_backup(dest: &str, auto_yes: bool) -> anyhow::Result<()> {
     let dest = std::path::Path::new(dest);
     let dest_str = dest.to_string_lossy().to_string();
