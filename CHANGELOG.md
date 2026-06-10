@@ -1,0 +1,12 @@
+# Changelog
+
+## v1.0.0 — 2026-06-10
+
+- **Pacman-style animated progress bar**: install and uninstall scripts now feature a themed box-drawing banner, braille spinner, diamond status indicators, and section-based output matching backup-games
+- **Optimized refactor**: removed `count_files`, DRY package list and gdu logic, cleaned up vars
+- **Progress display**: rclone `--progress` with `--stats=1s` for live transfer updates
+- **Change tracking**: manifest-based skip for unchanged browser profiles and extra dirs
+- **Restore improvements**: fzf multi-select, subdirectory restore, SSH/GPG/keyring support
+- **VM backup**: libvirt configs and disk images, sudo rclone for system paths
+- **Auto-deps**: installs rclone, gdu, fzf via pacman/apt/dnf/zypper/apk
+- **Drive detection**: auto-tunes checkers/transfers based on HDD/SSD/NVMe

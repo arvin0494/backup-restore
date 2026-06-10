@@ -8,170 +8,66 @@ HTTPS_URL="https://github.com/$REPO.git"
 DEST="${XDG_DATA_HOME:-$HOME/.local/share}/backup-restore"
 BIN="${XDG_BIN_HOME:-$HOME/.local/bin}/backup"
 
-# ── Colours ────────────────────────────────────────────────
-R="\033[0;31m"; G="\033[0;32m"; Y="\033[0;33m"; C="\033[0;36m"; W="\033[1;37m"; N="\033[0m"
+R=$'\033[31m' G=$'\033[32m' Y=$'\033[33m' C=$'\033[36m' B=$'\033[1m' D=$'\033[2m' N=$'\033[0m'
 
-info()  { printf "  ${C}%s${N}\n" "$*"; }
-ok()    { printf "  ${G}%s${N}\n" "$*"; }
-warn()  { printf "  ${Y}%s${N}\n" "$*"; }
-err()   { printf "  ${R}%s${N}\n" "$*"; }
-
-status() {
-    local label="$1" val="$2"
-    printf "  ${W}▸${N} ${label} ${G}${val}${N}\n"
+header() {
+    printf "\n${C}   ╭──────────────────────────────────────────╮${N}\n"
+    printf "${C}   │${B}         backup-restore installer${N}            ${C}│${N}\n"
+    printf "${C}   │${D}     Linux Backup & Restore Tool${N}            ${C}│${N}\n"
+    printf "${C}   ╰──────────────────────────────────────────╯${N}\n\n"
 }
 
-BAR_W=40
-
-# ── Pacman-style progress bar ─────────────────────────────
-# Usage: progress "message" <pct>
-progress() {
-    local msg="$1" pct="$2"
-    local filled=$((pct * BAR_W / 100))
-    local empty=$((BAR_W - filled))
-    printf "\r  ${C}(${N}${W}1${N}${C}/${N}${W}1${N}${C})${N} ${C}%s${N}" "$msg"
-    local pad=$((60 - ${#msg}))
-    [[ pad -lt 1 ]] && pad=1
-    printf "%*s" "$pad" ""
-    printf "${C}[${N}"
-    for ((i=0; i<filled; i++)); do printf "${G}#${N}"; done
-    for ((i=0; i<empty; i++)); do printf "${C}-${N}"; done
-    printf "${C}]${N} ${W}%3d%%${N}" "$pct"
-    if [[ "$pct" -ge 100 ]]; then
-        printf "\n"
-    fi
+section() {
+    local n="$1" title="$2"
+    printf "   ${D}──${N} ${B}${C}%s${N} ${D}%s${N}\n" "$n" "$title"
 }
 
-# ── Pacman-style running indicator ────────────────────────
-# Shows an animated indeterminate bar while a command runs.
-# Usage: run_with_spinner "message" <command>
-run_with_spinner() {
-    local msg="$1"
-    shift
-    if [[ $# -eq 0 ]]; then
-        printf "  ${C}(1/1)${N} ${C}%s${N}\n" "$msg"
-        return
-    fi
-    local pid
-    (
-        eval "$*" >/dev/null 2>&1
-    ) &
-    pid=$!
-    local i=0
+step()    { printf "  ${C}◇${N} %s\n" "$*"; }
+ok()      { printf "  ${G}◆${N} %-28s ${G}%s${N}\n" "$1" "$2"; }
+warn()    { printf "  ${Y}◇${N} %s\n" "$*"; }
+info()    { printf "  ${D}◇${N} %-28s ${D}%s${N}\n" "$1" "$2"; }
+success() { printf "\n  ${B}${G}◆  %s${N}\n" "$*"; }
+fail()    { printf "\n  ${B}${R}◆  %s${N}\n" "$*"; }
+
+spin() {
+    local pid=$1 msg="$2" s
+    s=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
     while kill -0 "$pid" 2>/dev/null; do
-        local filled=$(( (i * 2) % (BAR_W * 2) ))
-        [[ filled -gt BAR_W ]] && filled=$((BAR_W * 2 - filled))
-        local bar=""
-        for ((b=0; b<filled; b++)); do bar+="#"; done
-        for ((b=0; b<BAR_W-filled; b++)); do bar+="-"; done
-        printf "\r  ${C}(1/1)${N} ${C}%s${N}" "$msg"
-        local pad=$((60 - ${#msg}))
-        [[ pad -lt 1 ]] && pad=1
-        printf "%*s" "$pad" ""
-        printf "${C}[${G}%s${C}]${N}" "$bar"
-        i=$((i + 1))
-        sleep 0.08
-    done
-    wait "$pid"
-    local rc=$?
-    printf "\r  ${C}(1/1)${N} ${C}%s${N}" "$msg"
-    local pad=$((60 - ${#msg}))
-    [[ pad -lt 1 ]] && pad=1
-    printf "%*s" "$pad" ""
-    printf "${C}[${N}"
-    for ((b=0; b<BAR_W; b++)); do printf "${G}#${N}"; done
-    printf "${C}]${N} ${W}100%%${N}\n"
-    return $rc
-}
-
-# ── Animated bouncing bar (indeterminate) ─────────────────
-_indet_pid=""
-indet_start() {
-    local msg="$1"
-    (
-        local i=0
-        while true; do
-            local filled=$(( (i * 2) % (BAR_W * 2) ))
-            [[ filled -gt BAR_W ]] && filled=$((BAR_W * 2 - filled))
-            local bar=""
-            for ((b=0; b<filled; b++)); do bar+="#"; done
-            for ((b=0; b<BAR_W-filled; b++)); do bar+="-"; done
-            printf "\r  ${C}(1/1)${N} ${C}%s${N}" "$msg"
-            local pad=$((60 - ${#msg}))
-            [[ pad -lt 1 ]] && pad=1
-            printf "%*s" "$pad" ""
-            printf "${C}[${G}%s${C}]${N}" "$bar"
-            i=$((i + 1))
+        for c in "${s[@]}"; do
+            printf "\r  ${C}%s${N} %s" "$c" "$msg"
             sleep 0.08
         done
-    ) &
-    _indet_pid=$!
-}
-indet_stop() {
-    [[ -n "$_indet_pid" ]] && kill "$_indet_pid" 2>/dev/null && wait "$_indet_pid" 2>/dev/null
-    printf "\r%80s\r"
-    _indet_pid=""
-}
-indet_stop_ok() {
-    local msg="$1"
-    indet_stop
-    printf "  ${C}(1/1)${N} ${C}%s${N}  ${C}[${G}#${C}]${N} ${W}100%%${N}\n" "$msg"
-}
-indet_stop_fail() {
-    local msg="$1"
-    indet_stop
-    printf "  ${C}(1/1)${N} ${C}%s${N}  ${C}[${R}-${C}]${N} ${R}FAIL${N}\n" "$msg"
+    done
+    printf "\r  ${G}◆${N} %s\n" "$msg"
 }
 
-# ── Header ─────────────────────────────────────────────────
-echo ""
-printf "  ${C}██████╗  █████╗  ██████╗██╗  ██╗██╗   ██╗██████╗${N}\n"
-printf "  ${C}██╔══██╗██╔══██╗██╔════╝██║ ██╔╝██║   ██║██╔══██╗${N}\n"
-printf "  ${C}██████╔╝███████║██║     █████╔╝ ██║   ██║██████╔╝${N}\n"
-printf "  ${C}██╔══██╗██╔══██║██║     ██╔═██╗ ██║   ██║██╔═══╝${N}\n"
-printf "  ${C}██████╔╝██║  ██║╚██████╗██║  ██╗╚██████╔╝██║${N}\n"
-printf "  ${C}╚═════╝ ╚═╝  ╚═╝ ╚═════╝╚═╝  ╚═╝ ╚═════╝ ╚═╝${N}\n"
-echo ""
-
-# ── Pre-checks ─────────────────────────────────────────────
-printf "  ${W}▸${N} ROOT ACCESS ........................ ${G}CONFIRMED${N}\n"
-printf "  ${W}▸${N} USER .............................. ${C}${USER}${N}\n"
-printf "  ${W}▸${N} TARGET ............................ ${C}${BIN}${N}\n"
-printf "  ${W}▸${N} SOURCE ............................ ${C}${HTTPS_URL}${N}\n"
-echo ""
-
-# ── Ensure Rust is installed ───────────────────────────────
 ensure_rust() {
     [[ -f "$HOME/.cargo/env" ]] && . "$HOME/.cargo/env"
 
     if command -v rustc &>/dev/null && command -v cargo &>/dev/null; then
-        progress "Rust check" 100
-        status "RUST ............................... " "$(rustc --version)"
+        ok "Rust" "$(rustc --version)"
         return 0
     fi
 
     if [[ -x "$HOME/.cargo/bin/rustc" && -x "$HOME/.cargo/bin/cargo" ]]; then
         export PATH="$HOME/.cargo/bin:$PATH"
-        progress "Rust check" 100
-        status "RUST ............................... " "$("$HOME/.cargo/bin/rustc" --version)"
+        ok "Rust" "$("$HOME/.cargo/bin/rustc" --version)"
         return 0
     fi
 
-    printf "  ${C}── INSTALLING RUST ──${N}\n"
-    echo ""
-    printf "  ${Y}Rust is not installed. Choose method:${N}\n"
-    printf "  ${W}  1${N}) rustup (recommended)\n"
-    printf "  ${W}  2${N}) system package manager (pacman / apt / dnf / zypper / apk)\n"
-    printf "  ${W}  3${N}) skip — I'll install it myself\n"
-    echo ""
-    printf "  ${W}  Choose [1]:${N} "
+    printf "\n  ${Y}Rust is not installed. Choose method:${N}\n"
+    printf "  ${B}  1${N}) rustup (recommended)\n"
+    printf "  ${B}  2${N}) system package manager (pacman / apt / dnf / zypper / apk)\n"
+    printf "  ${B}  3${N}) skip — I'll install it myself\n"
+    printf "\n  ${B}  Choose [1]:${N} "
     read -r ans
     case "${ans:-1}" in
         1|"")
-            run_with_spinner "Installing rustup…" \
-                "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path"
+            step "Installing rustup…"
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+                | sh -s -- -y --no-modify-path >/dev/null 2>&1
             . "$HOME/.cargo/env"
-            status "RUST ............................... " "$(rustc --version)"
+            ok "Rust" "$(rustc --version)"
             ;;
         2)
             if command -v pacman &>/dev/null; then
@@ -185,61 +81,58 @@ ensure_rust() {
             elif command -v apk &>/dev/null; then
                 pkg_cmd="sudo apk add rust cargo"
             else
-                err "No known package manager found."
-                err "Install Rust manually: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh"
+                fail "No known package manager found."
                 exit 1
             fi
-            if ! run_with_spinner "Installing rust via package manager…" "$pkg_cmd"; then
-                err "Rust not found after install."
+            step "Installing via package manager…"
+            $pkg_cmd >/dev/null 2>&1 || true
+            if ! command -v rustc &>/dev/null; then
+                fail "Rust not found after install."
                 exit 1
             fi
-            status "RUST ............................... " "$(rustc --version)"
+            ok "Rust" "$(rustc --version)"
             ;;
         *)
-            err "Rust is required."
-            err "  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh"
+            fail "Rust is required."
             exit 1
             ;;
     esac
 }
 
-# ── Clone / update repo ────────────────────────────────────
 clone_repo() {
-    printf "  ${C}── DOWNLOADING SOURCE ──${N}\n"
-    echo ""
     if [[ -d "$DEST" ]]; then
-        run_with_spinner "Updating existing repository…" \
-            "git -C '$DEST' fetch origin '$BRANCH' 2>/dev/null; git -C '$DEST' reset --hard 'origin/$BRANCH' 2>/dev/null"
-        status "CLONE .............................. " "$DEST"
+        (git -C "$DEST" fetch origin "$BRANCH" 2>/dev/null; \
+         git -C "$DEST" reset --hard "origin/$BRANCH" 2>/dev/null) &
+        spin $! "Updating existing repository"
+        ok "Clone" "$DEST"
     else
-        if ! run_with_spinner "Cloning repository…" \
-            "git clone --branch '$BRANCH' --depth 1 '$HTTPS_URL' '$DEST' 2>/dev/null"; then
-            run_with_spinner "Cloning via SSH…" \
-                "git clone --branch '$BRANCH' --depth 1 '$SSH_URL' '$DEST'"
-        fi
-        status "CLONE .............................. " "$DEST"
+        (git clone --branch "$BRANCH" --depth 1 "$HTTPS_URL" "$DEST" 2>/dev/null || \
+         git clone --branch "$BRANCH" --depth 1 "$SSH_URL" "$DEST") &
+        spin $! "Cloning repository"
+        ok "Clone" "$DEST"
     fi
 }
 
-# ── Build release binary ───────────────────────────────────
 build_binary() {
-    printf "  ${C}── BUILDING BINARY ──${N}\n"
-    echo ""
-    if run_with_spinner "Compiling (this may take a while)…" \
-        "cargo build --release --manifest-path '$DEST/backup-rs/Cargo.toml'"; then
-        run_with_spinner "Installing binary…" \
-            "mkdir -p '$(dirname "$BIN")' && cp '$DEST/backup-rs/target/release/backup' '$BIN' && chmod +x '$BIN'"
-        status "BINARY .............................. " "$BIN"
-    else
-        err "Build failed. Run manually: cargo build --release --manifest-path '$DEST/backup-rs/Cargo.toml'"
+    step "Compiling..."
+    cargo build --release --manifest-path "$DEST/backup-rs/Cargo.toml" 2>&1 | while IFS= read -r line; do
+        [[ "$line" == "   Compiling "* ]] && printf "\r  ${C}⠙${N} %s" "${line#   }"
+        [[ "$line" == "    Finished"* ]] && printf "\r  ${G}◆${N} Build complete\n"
+    done
+
+    if [[ ! -f "$DEST/backup-rs/target/release/backup" ]]; then
+        fail "Build failed."
         exit 1
     fi
+
+    step "Installing..."
+    mkdir -p "$(dirname "$BIN")"
+    cp "$DEST/backup-rs/target/release/backup" "$BIN"
+    chmod +x "$BIN"
+    ok "Binary" "$BIN"
 }
 
-# ── Add shell alias ────────────────────────────────────────
 shell_aliases() {
-    printf "  ${C}── INJECTING SHELL ALIAS ──${N}\n"
-    echo ""
     local rc
     case "${SHELL##*/}" in
         zsh)  rc="$HOME/.zshrc" ;;
@@ -253,11 +146,9 @@ shell_aliases() {
         line="alias bckup='$BIN'"
         if ! grep -sqE "^alias bckup[= ']" "$rc" 2>/dev/null; then
             echo "$line" >> "$rc"
-            ok "Alias injected"
-            status "SHELL RC ............................ " "$rc"
+            ok "Alias" "injected"
         else
-            ok "Alias verified"
-            status "SHELL RC ............................ " "$rc (already set)"
+            ok "Alias" "already set"
         fi
     else
         line="alias bckup='$BIN'"
@@ -265,24 +156,31 @@ shell_aliases() {
             echo "" >> "$rc"
             echo "# backup-restore" >> "$rc"
             echo "$line" >> "$rc"
-            ok "Alias injected"
-            status "SHELL RC ............................ " "$rc"
+            ok "Alias" "injected"
         else
-            ok "Alias verified"
-            status "SHELL RC ............................ " "$rc (already set)"
+            ok "Alias" "already set"
         fi
     fi
 }
 
-# ── Create default config ─────────────────────────────────
+show_changelog() {
+    local changelog="$1/CHANGELOG.md"
+    if [ ! -f "$changelog" ]; then return; fi
+    printf "\n   ${D}──${N} ${B}${C}What's new${N}\n"
+    while IFS= read -r line; do
+        case "$line" in
+            "## v"*) printf "  ${B}${C}%s${N}\n" "${line### }" ;;
+            "- "*)   printf "  ${D}%s${N}\n" "${line}" ;;
+        esac
+    done < "$changelog"
+    echo
+}
+
 create_config() {
-    printf "  ${C}── INITIALIZING CONFIG ──${N}\n"
-    echo ""
     local cfg_dir="$HOME/.config/backup-restore"
     local cfg_file="$cfg_dir/config"
     if [[ -f "$cfg_file" ]]; then
-        ok "Config exists"
-        status "CONFIG .............................. " "$cfg_file"
+        ok "Config" "$cfg_file"
         return
     fi
     mkdir -p "$cfg_dir"
@@ -295,23 +193,35 @@ BACKUP_BASE=/mnt/HDD4T/BACKUP
 # VM_IMAGES_SRC=/var/lib/libvirt/images
 # BACKUP_EXTRA_DIRS=/path/to/something,/another/path
 EOF
-    ok "Config created"
-    status "CONFIG .............................. " "$cfg_file"
+    ok "Config" "$cfg_file"
 }
 
-# ── Execute ────────────────────────────────────────────────
-ensure_rust
-clone_repo
-build_binary
-shell_aliases
-create_config
+main() {
+    header
 
-# ── Complete ───────────────────────────────────────────────
-echo ""
-printf "  ${W}▸${N} RUN ................................ ${C}bckup -b${N}\n"
-printf "  ${W}▸${N} HELP ............................... ${C}bckup --help${N}\n"
-printf "  ${W}▸${N} UNINSTALL .......................... ${C}bash $DEST/uninstall.sh${N}\n"
+    info "User" "$(whoami)"
+    info "Target" "$BIN"
 
-VERSION=$(grep -oP '(?<=^version = ").*(?=")' "$DEST/backup-rs/Cargo.toml" 2>/dev/null || echo "dev")
-printf "  ${W}▸${N} VERSION ............................ ${C}v${VERSION}${N}\n"
-echo ""
+    echo
+    section "1" "Fetching source"
+    ensure_rust
+    clone_repo
+
+    echo
+    section "2" "Building binary"
+    build_binary
+
+    show_changelog "$DEST"
+
+    echo
+    section "3" "Setting up"
+    shell_aliases
+    create_config
+
+    echo
+    success "Install complete!"
+    step "Run ${B}${C}bckup -b${N} or ${B}${C}bckup --help${N}"
+    echo
+}
+
+main "$@"
