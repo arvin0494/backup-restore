@@ -12,8 +12,8 @@ R=$'\033[31m' G=$'\033[32m' Y=$'\033[33m' C=$'\033[36m' B=$'\033[1m' D=$'\033[2m
 
 header() {
     printf "\n${C}   ╭──────────────────────────────────────────╮${N}\n"
-    printf "${C}   │${B}        backup-restore installer${N}         ${C}│${N}\n"
-    printf "${C}   │${D}      Linux Backup & Restore Tool${N}        ${C}│${N}\n"
+    printf "${C}   │${B}         backup-restore installer${N}        ${C}│${N}\n"
+    printf "${C}   │${D}       Linux Backup & Restore Tool${N}       ${C}│${N}\n"
     printf "${C}   ╰──────────────────────────────────────────╯${N}\n\n"
 }
 
