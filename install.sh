@@ -21,14 +21,106 @@ status() {
     printf "  ${W}▸${N} ${label} ${G}${val}${N}\n"
 }
 
+BAR_W=40
+
+# ── Pacman-style progress bar ─────────────────────────────
+# Usage: progress "message" <pct>
 progress() {
-    local pct="$1" msg="$2"
-    local filled=$((pct / 5))
-    local empty=$((20 - filled))
-    printf "  ${C}[${N}"
-    for ((i=0; i<filled; i++)); do printf "${G}█${N}"; done
-    for ((i=0; i<empty; i++)); do printf "${C}░${N}"; done
-    printf "${C}]${N}  ${W}%3d%%${N} %s\n" "$pct" "$msg"
+    local msg="$1" pct="$2"
+    local filled=$((pct * BAR_W / 100))
+    local empty=$((BAR_W - filled))
+    printf "\r  ${C}(${N}${W}1${N}${C}/${N}${W}1${N}${C})${N} ${C}%s${N}" "$msg"
+    local pad=$((60 - ${#msg}))
+    [[ pad -lt 1 ]] && pad=1
+    printf "%*s" "$pad" ""
+    printf "${C}[${N}"
+    for ((i=0; i<filled; i++)); do printf "${G}#${N}"; done
+    for ((i=0; i<empty; i++)); do printf "${C}-${N}"; done
+    printf "${C}]${N} ${W}%3d%%${N}" "$pct"
+    if [[ "$pct" -ge 100 ]]; then
+        printf "\n"
+    fi
+}
+
+# ── Pacman-style running indicator ────────────────────────
+# Shows an animated indeterminate bar while a command runs.
+# Usage: run_with_spinner "message" <command>
+run_with_spinner() {
+    local msg="$1"
+    shift
+    if [[ $# -eq 0 ]]; then
+        printf "  ${C}(1/1)${N} ${C}%s${N}\n" "$msg"
+        return
+    fi
+    local pid
+    (
+        eval "$*" >/dev/null 2>&1
+    ) &
+    pid=$!
+    local i=0
+    while kill -0 "$pid" 2>/dev/null; do
+        local filled=$(( (i * 2) % (BAR_W * 2) ))
+        [[ filled -gt BAR_W ]] && filled=$((BAR_W * 2 - filled))
+        local bar=""
+        for ((b=0; b<filled; b++)); do bar+="#"; done
+        for ((b=0; b<BAR_W-filled; b++)); do bar+="-"; done
+        printf "\r  ${C}(1/1)${N} ${C}%s${N}" "$msg"
+        local pad=$((60 - ${#msg}))
+        [[ pad -lt 1 ]] && pad=1
+        printf "%*s" "$pad" ""
+        printf "${C}[${G}%s${C}]${N}" "$bar"
+        i=$((i + 1))
+        sleep 0.08
+    done
+    wait "$pid"
+    local rc=$?
+    printf "\r  ${C}(1/1)${N} ${C}%s${N}" "$msg"
+    local pad=$((60 - ${#msg}))
+    [[ pad -lt 1 ]] && pad=1
+    printf "%*s" "$pad" ""
+    printf "${C}[${N}"
+    for ((b=0; b<BAR_W; b++)); do printf "${G}#${N}"; done
+    printf "${C}]${N} ${W}100%%${N}\n"
+    return $rc
+}
+
+# ── Animated bouncing bar (indeterminate) ─────────────────
+_indet_pid=""
+indet_start() {
+    local msg="$1"
+    (
+        local i=0
+        while true; do
+            local filled=$(( (i * 2) % (BAR_W * 2) ))
+            [[ filled -gt BAR_W ]] && filled=$((BAR_W * 2 - filled))
+            local bar=""
+            for ((b=0; b<filled; b++)); do bar+="#"; done
+            for ((b=0; b<BAR_W-filled; b++)); do bar+="-"; done
+            printf "\r  ${C}(1/1)${N} ${C}%s${N}" "$msg"
+            local pad=$((60 - ${#msg}))
+            [[ pad -lt 1 ]] && pad=1
+            printf "%*s" "$pad" ""
+            printf "${C}[${G}%s${C}]${N}" "$bar"
+            i=$((i + 1))
+            sleep 0.08
+        done
+    ) &
+    _indet_pid=$!
+}
+indet_stop() {
+    [[ -n "$_indet_pid" ]] && kill "$_indet_pid" 2>/dev/null && wait "$_indet_pid" 2>/dev/null
+    printf "\r%80s\r"
+    _indet_pid=""
+}
+indet_stop_ok() {
+    local msg="$1"
+    indet_stop
+    printf "  ${C}(1/1)${N} ${C}%s${N}  ${C}[${G}#${C}]${N} ${W}100%%${N}\n" "$msg"
+}
+indet_stop_fail() {
+    local msg="$1"
+    indet_stop
+    printf "  ${C}(1/1)${N} ${C}%s${N}  ${C}[${R}-${C}]${N} ${R}FAIL${N}\n" "$msg"
 }
 
 # ── Header ─────────────────────────────────────────────────
@@ -53,14 +145,14 @@ ensure_rust() {
     [[ -f "$HOME/.cargo/env" ]] && . "$HOME/.cargo/env"
 
     if command -v rustc &>/dev/null && command -v cargo &>/dev/null; then
-        progress 100 "Rust check"
+        progress "Rust check" 100
         status "RUST ............................... " "$(rustc --version)"
         return 0
     fi
 
     if [[ -x "$HOME/.cargo/bin/rustc" && -x "$HOME/.cargo/bin/cargo" ]]; then
         export PATH="$HOME/.cargo/bin:$PATH"
-        progress 100 "Rust check"
+        progress "Rust check" 100
         status "RUST ............................... " "$("$HOME/.cargo/bin/rustc" --version)"
         return 0
     fi
@@ -76,37 +168,31 @@ ensure_rust() {
     read -r ans
     case "${ans:-1}" in
         1|"")
-            progress 14 "Fetching rustup…"
-            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
-                | sh -s -- -y --no-modify-path >/dev/null 2>&1
-            progress 50 "Installing rustup…"
+            run_with_spinner "Installing rustup…" \
+                "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path"
             . "$HOME/.cargo/env"
-            progress 100 "Rust installed"
             status "RUST ............................... " "$(rustc --version)"
             ;;
         2)
             if command -v pacman &>/dev/null; then
-                run="sudo pacman -S --noconfirm rust"
+                pkg_cmd="sudo pacman -S --noconfirm rust"
             elif command -v apt-get &>/dev/null; then
-                run="sudo apt-get install -y rustc cargo"
+                pkg_cmd="sudo apt-get install -y rustc cargo"
             elif command -v dnf &>/dev/null; then
-                run="sudo dnf install -y rust cargo"
+                pkg_cmd="sudo dnf install -y rust cargo"
             elif command -v zypper &>/dev/null; then
-                run="sudo zypper install -y rust cargo"
+                pkg_cmd="sudo zypper install -y rust cargo"
             elif command -v apk &>/dev/null; then
-                run="sudo apk add rust cargo"
+                pkg_cmd="sudo apk add rust cargo"
             else
                 err "No known package manager found."
                 err "Install Rust manually: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh"
                 exit 1
             fi
-            progress 30 "Installing via package manager…"
-            $run >/dev/null 2>&1
-            if ! command -v rustc &>/dev/null; then
+            if ! run_with_spinner "Installing rust via package manager…" "$pkg_cmd"; then
                 err "Rust not found after install."
                 exit 1
             fi
-            progress 100 "Rust installed"
             status "RUST ............................... " "$(rustc --version)"
             ;;
         *)
@@ -122,19 +208,15 @@ clone_repo() {
     printf "  ${C}── DOWNLOADING SOURCE ──${N}\n"
     echo ""
     if [[ -d "$DEST" ]]; then
-        progress 40 "Updating existing clone…"
-        git -C "$DEST" fetch origin "$BRANCH" 2>/dev/null || true
-        git -C "$DEST" reset --hard "origin/$BRANCH" 2>/dev/null || true
-        progress 100 "Repository updated"
+        run_with_spinner "Updating existing repository…" \
+            "git -C '$DEST' fetch origin '$BRANCH' 2>/dev/null; git -C '$DEST' reset --hard 'origin/$BRANCH' 2>/dev/null"
         status "CLONE .............................. " "$DEST"
     else
-        progress 10 "Cloning repository…"
-        if git clone --branch "$BRANCH" --depth 1 "$HTTPS_URL" "$DEST" 2>/dev/null; then
-            :
-        else
-            git clone --branch "$BRANCH" --depth 1 "$SSH_URL" "$DEST"
+        if ! run_with_spinner "Cloning repository…" \
+            "git clone --branch '$BRANCH' --depth 1 '$HTTPS_URL' '$DEST' 2>/dev/null"; then
+            run_with_spinner "Cloning via SSH…" \
+                "git clone --branch '$BRANCH' --depth 1 '$SSH_URL' '$DEST'"
         fi
-        progress 100 "Repository cloned"
         status "CLONE .............................. " "$DEST"
     fi
 }
@@ -143,14 +225,15 @@ clone_repo() {
 build_binary() {
     printf "  ${C}── BUILDING BINARY ──${N}\n"
     echo ""
-    progress 10 "Compiling (this may take a while)…"
-    cargo build --release --manifest-path "$DEST/backup-rs/Cargo.toml" >/dev/null 2>&1
-    progress 70 "Installing binary…"
-    mkdir -p "$(dirname "$BIN")"
-    cp "$DEST/backup-rs/target/release/backup" "$BIN"
-    chmod +x "$BIN"
-    progress 100 "Build complete"
-    status "BINARY .............................. " "$BIN"
+    if run_with_spinner "Compiling (this may take a while)…" \
+        "cargo build --release --manifest-path '$DEST/backup-rs/Cargo.toml'"; then
+        run_with_spinner "Installing binary…" \
+            "mkdir -p '$(dirname "$BIN")' && cp '$DEST/backup-rs/target/release/backup' '$BIN' && chmod +x '$BIN'"
+        status "BINARY .............................. " "$BIN"
+    else
+        err "Build failed. Run manually: cargo build --release --manifest-path '$DEST/backup-rs/Cargo.toml'"
+        exit 1
+    fi
 }
 
 # ── Add shell alias ────────────────────────────────────────
@@ -170,10 +253,10 @@ shell_aliases() {
         line="alias bckup='$BIN'"
         if ! grep -sqE "^alias bckup[= ']" "$rc" 2>/dev/null; then
             echo "$line" >> "$rc"
-            progress 100 "Alias injected"
+            ok "Alias injected"
             status "SHELL RC ............................ " "$rc"
         else
-            progress 100 "Alias verified"
+            ok "Alias verified"
             status "SHELL RC ............................ " "$rc (already set)"
         fi
     else
@@ -182,10 +265,10 @@ shell_aliases() {
             echo "" >> "$rc"
             echo "# backup-restore" >> "$rc"
             echo "$line" >> "$rc"
-            progress 100 "Alias injected"
+            ok "Alias injected"
             status "SHELL RC ............................ " "$rc"
         else
-            progress 100 "Alias verified"
+            ok "Alias verified"
             status "SHELL RC ............................ " "$rc (already set)"
         fi
     fi
@@ -198,7 +281,7 @@ create_config() {
     local cfg_dir="$HOME/.config/backup-restore"
     local cfg_file="$cfg_dir/config"
     if [[ -f "$cfg_file" ]]; then
-        progress 100 "Config exists"
+        ok "Config exists"
         status "CONFIG .............................. " "$cfg_file"
         return
     fi
@@ -212,7 +295,7 @@ BACKUP_BASE=/mnt/HDD4T/BACKUP
 # VM_IMAGES_SRC=/var/lib/libvirt/images
 # BACKUP_EXTRA_DIRS=/path/to/something,/another/path
 EOF
-    progress 100 "Config created"
+    ok "Config created"
     status "CONFIG .............................. " "$cfg_file"
 }
 
