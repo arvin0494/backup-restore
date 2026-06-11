@@ -56,15 +56,7 @@ fn main() -> anyhow::Result<()> {
     // If no flags were given, run the interactive menu (default = backup)
     if cli.backup.is_none() && cli.restore.is_none() {
         let dest = cli.dest.unwrap_or_else(util::detect_path);
-        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let _ = backup::do_backup(&dest, cli.yes);
-        })) {
-            Ok(_) => {}
-            Err(_) => {
-                eprintln!();
-                util::e(&format!("{}Backup cancelled.{}", util::R, util::N));
-            }
-        }
+        backup::do_backup(&dest, cli.yes)?;
         return Ok(());
     }
 
@@ -81,15 +73,7 @@ fn main() -> anyhow::Result<()> {
             }),
         };
         let dest_dir = cli.dest.unwrap_or_else(|| HOME.get().unwrap().clone());
-        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let _ = restore::do_restore(&backup_dir, &dest_dir, cli.yes);
-        })) {
-            Ok(_) => {}
-            Err(_) => {
-                eprintln!();
-                util::e(&format!("{}Restore cancelled.{}", util::R, util::N));
-            }
-        }
+        restore::do_restore(&backup_dir, &dest_dir, cli.yes)?;
         return Ok(());
     }
 
@@ -99,15 +83,7 @@ fn main() -> anyhow::Result<()> {
             Some(v) => v,
             None => cli.dest.unwrap_or_else(util::detect_path),
         };
-        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let _ = backup::do_backup(&dest, cli.yes);
-        })) {
-            Ok(_) => {}
-            Err(_) => {
-                eprintln!();
-                util::e(&format!("{}Backup cancelled.{}", util::R, util::N));
-            }
-        }
+        backup::do_backup(&dest, cli.yes)?;
     }
 
     Ok(())

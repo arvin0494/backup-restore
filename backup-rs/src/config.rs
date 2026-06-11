@@ -98,7 +98,7 @@ pub const HOME_EXCLUDES: &[&str] = &[
 pub const CONFIG_EXCLUDES: &[&str] = &[
     "Trash", "trash", "Session", "sessions",
     "tmp", "temp", "thumbnails", "thumbcache", "logs", "Logs",
-    "node_modules", "*.bak", "*~",
+    "node_modules/", "*.bak", "*~",
     // Browser profiles — handled separately by backup_browsers
     "google-chrome/", "chromium/", "BraveSoftware/", "mozilla/",
     "firefox/", "librewolf/",

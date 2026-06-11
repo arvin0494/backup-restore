@@ -42,18 +42,55 @@ pub fn gdu_size(path: &str, ignore: &str) -> u64 {
 //   openSUSE (zypper), Alpine (apk), Flatpak, and Snap.
 pub fn save_package_lists(dest: &str) {
     e("Saving package lists");
-    let commands = [
-        ("pacman -Qqen", "packages-pacman-official.txt"),
-        ("pacman -Qqem", "packages-aur.txt"),
-        ("dpkg --get-selections", "packages-dpkg.txt"),
-        (r"dnf list installed 2>/dev/null | tail -n +2 | awk '{print $1}'", "packages-dnf.txt"),
-        (r"zypper se --installed-only -s 2>/dev/null | tail -n +5 | awk '{print $3}'", "packages-zypper.txt"),
-        ("apk info", "packages-apk.txt"),
-        ("flatpak list --app --columns=application", "flatpak-list.txt"),
-        ("snap list", "snap-list.txt"),
-    ];
+
+    let os_id = std::fs::read_to_string("/etc/os-release")
+        .unwrap_or_default()
+        .lines()
+        .find_map(|line| line.strip_prefix("ID=").map(|v| v.trim_matches('"').trim().to_lowercase()))
+        .unwrap_or_default();
+
+    let mut commands: Vec<(&str, &str)> = Vec::new();
+
+    match os_id.as_str() {
+        "arch" | "archarm" | "manjaro" | "endeavouros" | "cachyos" | "arcolinux" | "garuda" => {
+            commands.push(("pacman -Qqen", "packages-pacman-official.txt"));
+            commands.push(("pacman -Qqem", "packages-aur.txt"));
+        }
+        "debian" | "ubuntu" | "linuxmint" | "pop" | "zorin" | "elementary" | "kali" => {
+            commands.push(("dpkg --get-selections", "packages-dpkg.txt"));
+        }
+        "fedora" | "rhel" | "centos" | "rocky" | "almalinux" => {
+            commands.push((r"dnf list installed 2>/dev/null | tail -n +2 | awk '{print $1}'", "packages-dnf.txt"));
+        }
+        "opensuse" | "opensuse-tumbleweed" | "suse" | "opensuse-leap" => {
+            commands.push((r"zypper se --installed-only -s 2>/dev/null | tail -n +5 | awk '{print $3}'", "packages-zypper.txt"));
+        }
+        "alpine" => {
+            commands.push(("apk info", "packages-apk.txt"));
+        }
+        _ => {
+            commands.push(("pacman -Qqen", "packages-pacman-official.txt"));
+            commands.push(("pacman -Qqem", "packages-aur.txt"));
+            commands.push(("dpkg --get-selections", "packages-dpkg.txt"));
+            commands.push((r"dnf list installed 2>/dev/null | tail -n +2 | awk '{print $1}'", "packages-dnf.txt"));
+            commands.push((r"zypper se --installed-only -s 2>/dev/null | tail -n +5 | awk '{print $3}'", "packages-zypper.txt"));
+            commands.push(("apk info", "packages-apk.txt"));
+        }
+    }
+
+    commands.push(("flatpak list --app --columns=application", "flatpak-list.txt"));
+    commands.push(("snap list", "snap-list.txt"));
+
+    let mut handles = Vec::new();
     for (cmd, filename) in commands {
-        let _ = run(&format!("{} > '{}/{}' 2>/dev/null", cmd, dest, filename));
+        let dest = dest.to_string();
+        let handle = thread::spawn(move || {
+            let _ = run(&format!("{} > '{}/{}' 2>/dev/null", cmd, dest, filename));
+        });
+        handles.push(handle);
+    }
+    for handle in handles {
+        let _ = handle.join();
     }
 }
 
@@ -88,10 +125,10 @@ pub fn estimate_home_size() -> u64 {
 // ── BACKUP CONFIGS ─────────────────────────────────────────
 // Copies your settings (~/.config, ~/.ssh, ~/.gnupg, keyrings)
 // to the backup folder. Skips caches and trash to save space.
-pub fn backup_config(dest: &str, ck: u32) {
+pub fn backup_config(dest: &str, ck: u32) -> anyhow::Result<()> {
     e("Backing up configs");
     let cfg_dest = format!("{}/config", dest);
-
+    
     let mut extra_args: Vec<&str> = Vec::new();
     for &x in CACHE_EXCLUDES.iter().chain(CONFIG_EXCLUDES.iter()) {
         extra_args.push("--exclude");
@@ -99,37 +136,38 @@ pub fn backup_config(dest: &str, ck: u32) {
     }
     let home = crate::HOME.get().unwrap();
     e(&format!("  {}.config{} → ...", W, N));
-    let _ = copy_progress("~/.config/", &cfg_dest, ck, false, &extra_args);
-
+    copy_progress(&format!("{}/.config/", home), &cfg_dest, ck, false, &extra_args)?;
+    
     for item in &[".ssh", ".gnupg", ".local/share/keyrings"] {
         let src = format!("{}/{}", home, item);
         if Path::new(&src).is_dir() {
             e(&format!("  {}{}{} → ...", W, item, N));
-            let _ = run(&format!("cp -a '{}' '{}/' 2>/dev/null", src, dest));
+            copy_progress(&src, &format!("{}/{}", dest, item), ck, false, &[])?;
         }
     }
+    Ok(())
 }
 
 // ── BACKUP BROWSERS ────────────────────────────────────────
 // Copies Firefox, Chromium, Chrome, and Brave profiles.
 // Only backs up profiles that changed since the last backup
 // (saves time by skipping unchanged ones).
-pub fn backup_browsers(dest: &str, ck: u32) {
+pub fn backup_browsers(dest: &str, ck: u32) -> anyhow::Result<()> {
     e("Backing up browser data");
     let b_dest = format!("{}/browser", dest);
-
+    
     let mut extra_args: Vec<&str> = Vec::new();
     for &x in CACHE_EXCLUDES.iter().chain(BROWSER_EXCLUDES.iter()) {
         extra_args.push("--exclude");
         extra_args.push(x);
     }
     let home = crate::HOME.get().unwrap();
-
+    
     let manifest_path = config::manifest_path();
     let mut manifest = load_manifest(&manifest_path);
     let mut changed = 0u32;
     let mut skipped = 0u32;
-
+    
     for (src_rel, name) in BROWSERS {
         let src = format!("{}/{}", home, src_rel);
         if !Path::new(&src).is_dir() { continue; }
@@ -140,70 +178,73 @@ pub fn backup_browsers(dest: &str, ck: u32) {
             continue;
         }
         e(&format!("  {}{}{} → ...", W, name, N));
-        let _ = copy_progress(
+        copy_progress(
             &format!("{}/", src),
             &format!("{}/{}/", b_dest, name),
             ck, false, &extra_args,
-        );
+        )?;
         manifest.insert(name.to_string(), mtime);
         changed += 1;
     }
-    let _ = save_manifest(&manifest_path, &manifest);
+    save_manifest(&manifest_path, &manifest)?;
     if changed > 0 || skipped > 0 {
         e(&format!("Done: {} backed up, {} skipped", changed, skipped));
     }
+    Ok(())
 }
 
 // ── BACKUP VIRTUAL MACHINES ────────────────────────────────
 // Saves libvirt VM configuration files and disk images
 // (if you use virt-manager / KVM / QEMU).
-pub fn backup_vm(dest: &str, ck: u32) {
+pub fn backup_vm(dest: &str, ck: u32) -> anyhow::Result<()> {
     e("Backing up VM data");
     let vm_dest = format!("{}/virt-manager", dest);
     let _ = std::fs::create_dir_all(&vm_dest);
-
+    
     if Path::new(VM_QEMU_SRC).is_dir() {
         e(&format!("  {}libvirt configs{} → ...", W, N));
-        let _ = run(&format!("sudo cp -a '{}' '{}/' 2>/dev/null", VM_QEMU_SRC, vm_dest));
+        run(&format!("sudo cp -a '{}' '{}/' 2>/dev/null", VM_QEMU_SRC, vm_dest))?;
     }
     if Path::new(VM_IMAGES_SRC).is_dir() {
         e(&format!("  {}VM disk images{} → ...", W, N));
-        let _ = copy_progress(VM_IMAGES_SRC, &format!("{}/images/", vm_dest), ck, true, &["--inplace"]);
+        copy_progress(VM_IMAGES_SRC, &format!("{}/images/", vm_dest), ck, true, &["--inplace"])?;
     }
+    Ok(())
 }
 
 // ── BACKUP HOME FOLDER ─────────────────────────────────────
 // Copies your entire home folder (~/), but excludes things
 // that don't need backing up: caches, trash, node_modules,
 // game installs, build artifacts, etc.
-pub fn backup_home(dest: &str, ck: u32) {
+pub fn backup_home(dest: &str, ck: u32) -> anyhow::Result<()> {
     e("Backing up home data");
     let home_dest = format!("{}/home", dest);
-
+    
     let mut extra_args: Vec<&str> = vec!["--links"];
     for &x in HOME_EXCLUDES.iter() {
         extra_args.push("--exclude");
         extra_args.push(x);
     }
     e(&format!("  {}~{}{} → ...", W, N, N));
-    let _ = copy_progress("~/", &home_dest, ck, true, &extra_args);
+    copy_progress(&format!("{}/", crate::HOME.get().unwrap()), &home_dest, ck, true, &extra_args)?;
+    Ok(())
 }
 
 // ── BACKUP EXTRA DIRECTORIES ───────────────────────────────
 // Copies any extra folders the user specified in the config
 // file (BACKUP_EXTRA_DIRS). Skips unchanged ones.
-pub fn backup_extra(dest: &str, ck: u32) {
+pub fn backup_extra(dest: &str, ck: u32) -> anyhow::Result<()> {
     let dirs = extra_backup_dirs();
-    if dirs.is_empty() { return; }
+    if dirs.is_empty() { return Ok(()); }
     e("Backing up extra dirs");
     let extra_dest = format!("{}/extra", dest);
     let _ = std::fs::create_dir_all(&extra_dest);
-
+    
     let manifest_path = config::manifest_path();
     let mut manifest = load_manifest(&manifest_path);
     let mut changed = 0u32;
     let mut skipped = 0u32;
-
+    
     for src in dirs {
         let p = Path::new(&src);
         if !p.is_dir() {
@@ -219,14 +260,15 @@ pub fn backup_extra(dest: &str, ck: u32) {
         }
         let target = format!("{}/{}", extra_dest, name);
         e(&format!("  {}{}{} → ...", W, name, N));
-        let _ = copy_progress(&src, &target, ck, false, &[]);
+        copy_progress(&src, &target, ck, false, &[])?;
         manifest.insert(name, mtime);
         changed += 1;
     }
-    let _ = save_manifest(&manifest_path, &manifest);
+    save_manifest(&manifest_path, &manifest)?;
     if changed > 0 || skipped > 0 {
         e(&format!("Done: {} backed up, {} skipped", changed, skipped));
     }
+    Ok(())
 }
 
 // ── DO BACKUP (main function) ──────────────────────────────
@@ -246,7 +288,7 @@ pub fn do_backup(dest: &str, auto_yes: bool) -> anyhow::Result<()> {
     if !run_ok(&format!("findmnt -n '{}'", base_mount)) {
         e(&format!("{}Error: backup drive not mounted at {}{}", R, base_mount, N));
         e(&format!("{}Mount the drive and try again.{}", Y, N));
-        std::process::exit(1);
+        return Err(anyhow::anyhow!("Backup drive not mounted"));
     }
     let _ = std::fs::create_dir_all(dest);
 
@@ -276,11 +318,11 @@ pub fn do_backup(dest: &str, auto_yes: bool) -> anyhow::Result<()> {
     save_package_lists(&dest_str);
     let _ = gdu_handle.join();
 
-    backup_config(&dest_str, ck);
-    backup_browsers(&dest_str, ck);
-    backup_vm(&dest_str, ck);
-    backup_home(&dest_str, ck);
-    backup_extra(&dest_str, ck);
+    backup_config(&dest_str, ck)?;
+    backup_browsers(&dest_str, ck)?;
+    backup_vm(&dest_str, ck)?;
+    backup_home(&dest_str, ck)?;
+    backup_extra(&dest_str, ck)?;
 
     let sz_out = run_stdout(&format!("du -sh '{}' | cut -f1", dest_str));
     e(&format!("{}{}Done!{}", BOLD, G, N));

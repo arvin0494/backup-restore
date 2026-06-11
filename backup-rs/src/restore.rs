@@ -30,7 +30,7 @@ pub fn do_restore(backup_dir: &str, dest_dir: &str, auto: bool) -> anyhow::Resul
 
     if !backup_dir.is_dir() {
         e(&format!("{}Error: backup directory not found{}", R, N));
-        std::process::exit(1);
+        return Err(anyhow::anyhow!("Backup directory not found"));
     }
 
     let bd = backup_dir.to_string_lossy().to_string();
@@ -186,7 +186,7 @@ pub fn do_restore(backup_dir: &str, dest_dir: &str, auto: bool) -> anyhow::Resul
 
     if items.is_empty() {
         e(&format!("{}Nothing found to restore in that directory{}", R, N));
-        std::process::exit(1);
+        return Err(anyhow::anyhow!("Nothing found to restore"));
     }
     e(&format!("Found {} item(s) to restore", items.len()));
 
@@ -204,7 +204,7 @@ pub fn do_restore(backup_dir: &str, dest_dir: &str, auto: bool) -> anyhow::Resul
             .collect::<Vec<_>>()
             .join("\n");
         let result = run_stdin(
-            "fzf --multi --prompt='Restore > ' --with-nth=2 -d'|' --height=60% --border",
+            "fzf --multi --prompt='Restore > ' --with-nth=2 -d'|' --height=60% --border --header='TAB: toggle | ENTER: start | Ctrl+A: all | Ctrl+R: invert' --bind='ctrl-a:select-all,ctrl-r:toggle-all'",
             &input,
         ).unwrap_or_default();
         result.lines()
