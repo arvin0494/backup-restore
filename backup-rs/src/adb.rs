@@ -1,5 +1,5 @@
 use crate::util::*;
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader};
 use std::net::TcpStream;
 use std::path::Path;
 use std::process::Command;
@@ -111,8 +111,7 @@ fn ftp_copy(src: &str, dst: &str, host: &str, port: &str, user: &str, pass: &str
     for line in reader.lines() {
         let line = line.unwrap_or_default();
         let line = line.trim_end_matches('\r').to_string();
-        print!("{}\r", line);
-        let _ = std::io::stdout().flush();
+        eprintln!("{}", line);
         if let Some(bytes) = parse_rclone_transferred(&line) {
             transferred = bytes;
         }
