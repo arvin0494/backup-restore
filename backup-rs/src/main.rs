@@ -89,8 +89,7 @@ fn main() -> anyhow::Result<()> {
                 );
                 adb::restore_android(&backup_dir)?;
             } else {
-                let dest = cli.dest.unwrap_or_else(util::detect_path);
-                adb::backup_android(&dest)?;
+                adb::backup_android()?;
             }
             return Ok(());
         }

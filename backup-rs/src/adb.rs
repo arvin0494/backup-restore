@@ -130,31 +130,7 @@ pub fn content_query(uri: &str) -> anyhow::Result<String> {
     shell(&format!("content query --uri {}", uri))
 }
 
-#[allow(dead_code)]
-pub fn connect_wifi(ip: &str) -> anyhow::Result<()> {
-    let usb_connected = run_ok("adb shell getprop ro.serialno 2>/dev/null");
-
-    if usb_connected {
-        e("Switching to TCP/IP mode...");
-        adb(&["tcpip", "5555"])?;
-        e(&format!("Unplug USB, then connecting to {}:5555...", ip));
-    } else {
-        e(&format!("Connecting to {}:5555...", ip));
-    }
-
-    let out = adb(&["connect", &format!("{}:5555", ip)]);
-    match out {
-        Ok(s) if s.contains("connected") => {
-            e(&format!("{}{}{}", G, s.trim(), N));
-            Ok(())
-        }
-        _ => Err(anyhow::anyhow!(
-            "Could not connect.\n  Connect phone via USB first, or use: ~/easy-scrcpy.sh --backup"
-        )),
-    }
-}
-
-pub fn backup_android(_dest: &str) -> anyhow::Result<()> {
+pub fn backup_android() -> anyhow::Result<()> {
     let device_list = devices();
     if device_list.is_empty() {
         return Err(anyhow::anyhow!("No Android device connected"));
@@ -206,6 +182,7 @@ pub fn backup_android(_dest: &str) -> anyhow::Result<()> {
             e(&format!("  {} {} copy failed: {}{}", R, dir, err, N));
         }
     }
+    e(&format!("  {}All media up to date — only new/changed files on re-runs{}", Y, N));
 
     ftp_stop();
 
