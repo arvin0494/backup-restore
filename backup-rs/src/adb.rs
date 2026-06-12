@@ -82,7 +82,7 @@ fn wait_for_ftp(host: &str, port: &str, timeout_secs: u64) -> bool {
 // ── RCLONE COPY VIA FTP ──────────────────────────────────
 // Uses rclone's FTP backend to copy files incrementally.
 // Only transfers new/changed files — identical files are skipped.
-fn ftp_copy(src: &str, dst: &str, host: &str, port: &str, user: &str, pass: &str) -> anyhow::Result<u64> {
+fn ftp_copy(src: &str, dst: &str, host: &str, port: &str, user: &str, pass: &str) -> anyhow::Result<(u64, u64, u64)> {
     let _ = std::fs::create_dir_all(dst);
 
     let obs_pass = run_stdout(&format!("rclone obscure '{}'", pass));
@@ -106,14 +106,20 @@ fn ftp_copy(src: &str, dst: &str, host: &str, port: &str, user: &str, pass: &str
 
     let stderr = child.stderr.take().unwrap();
     let reader = BufReader::new(stderr);
-    let mut transferred = 0u64;
+    let mut bytes = 0u64;
+    let mut files = 0u64;
+    let mut total = 0u64;
 
     for line in reader.lines() {
         let line = line.unwrap_or_default();
         let line = line.trim_end_matches('\r').to_string();
         eprintln!("{}", line);
-        if let Some(bytes) = parse_rclone_transferred(&line) {
-            transferred = bytes;
+        if let Some(b) = parse_rclone_data(&line) {
+            bytes = b;
+        } else if let Some(f) = parse_rclone_files(&line) {
+            files = f;
+        } else if let Some(t) = parse_rclone_checks(&line) {
+            total = t;
         }
     }
 
@@ -122,15 +128,12 @@ fn ftp_copy(src: &str, dst: &str, host: &str, port: &str, user: &str, pass: &str
         return Err(anyhow::anyhow!("rclone copy via FTP failed: {} -> {}", src, dst));
     }
 
-    Ok(transferred)
+    Ok((bytes, files, total))
 }
 
-fn parse_rclone_transferred(line: &str) -> Option<u64> {
+fn parse_rclone_data(line: &str) -> Option<u64> {
     let after = line.split_once("Transferred:")?.1.trim();
     let first = after.split_once('/')?.0.trim();
-    if first.contains('%') {
-        return None;
-    }
     let parts: Vec<&str> = first.split_whitespace().collect();
     if parts.len() < 2 { return None; }
     let val: f64 = parts[0].parse().ok()?;
@@ -141,6 +144,27 @@ fn parse_rclone_transferred(line: &str) -> Option<u64> {
         "KiB" => Some((val * 1024.0) as u64),
         "B" => Some(val as u64),
         _ => None,
+    }
+}
+
+fn parse_rclone_files(line: &str) -> Option<u64> {
+    let trimmed = line.trim_start();
+    if trimmed.starts_with("Transferred:") && trimmed.contains('%') {
+        let after = line.split_once("Transferred:")?.1.trim();
+        let first = after.split_once('/')?.0.trim();
+        first.parse().ok()
+    } else {
+        None
+    }
+}
+
+fn parse_rclone_checks(line: &str) -> Option<u64> {
+    let trimmed = line.trim_start();
+    if trimmed.starts_with("Checks:") {
+        let after = line.split_once("Checks:")?.1.trim();
+        after.split_once('/')?.0.trim().parse().ok()
+    } else {
+        None
     }
 }
 
@@ -208,17 +232,25 @@ pub fn backup_android() -> anyhow::Result<()> {
     }
 
     e("Copying media via FTP (rclone)...");
-    let mut total = 0u64;
+    let mut total_bytes = 0u64;
+    let mut total_files = 0u64;
+    let mut total_checked = 0u64;
     for dir in &["DCIM", "Download", "Pictures", "Movies", "Music", "MIUI"] {
         let src = format!("/device/{}", dir);
         let dst = format!("{}/{}", phone_dir, dir);
         match ftp_copy(&src, &dst, &ftp_host, &ftp_port, &ftp_user, &ftp_pass) {
-            Ok(bytes) => total += bytes,
+            Ok((b, f, c)) => {
+                total_bytes += b;
+                total_files += f;
+                total_checked += c;
+            }
             Err(err) => e(&format!("  {} {} copy failed: {}{}", R, dir, err, N)),
         }
     }
-    let total_fmt = fmt(total);
-    e(&format!("  {}Media copied: {}{}", C, total_fmt, N));
+    let skipped = total_checked.saturating_sub(total_files);
+    let total_fmt = fmt(total_bytes);
+    e(&format!("  {}Copied: {} files ({}), Skipped: {} files, Total checked: {} files{}",
+        C, total_files, total_fmt, skipped, total_checked, N));
 
     ftp_stop();
 
