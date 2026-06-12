@@ -50,9 +50,6 @@ fn main() -> anyhow::Result<()> {
 
         #[arg(long = "device")]
         device: Option<String>,           // "--device android"
-
-        #[arg(long = "wifi")]
-        wifi: Option<String>,             // "--wifi 192.168.1.5"
     }
 
     // Read what the user typed on the command line
@@ -64,9 +61,6 @@ fn main() -> anyhow::Result<()> {
     // Android device mode
     if let Some(device) = &cli.device {
         if device == "android" {
-            if let Some(ip) = &cli.wifi {
-                adb::connect_wifi(ip)?;
-            }
             if !adb::available() {
                 util::e(&format!("{}adb not found or no device connected{}", util::R, util::N));
                 return Ok(());
@@ -74,11 +68,23 @@ fn main() -> anyhow::Result<()> {
             if cli.restore.is_some() {
                 let backup_dir = cli.restore.unwrap().unwrap_or_else(||
                     cli.dest.clone().unwrap_or_else(|| {
+                        let dirs = adb::list_android_dirs();
+                        if !dirs.is_empty() {
+                            eprintln!("  Available Android backups:");
+                            for d in &dirs {
+                                eprintln!("    {}{}{}", util::C, d, util::N);
+                            }
+                        }
                         print!("  Backup directory: ");
                         std::io::stdout().flush().ok();
                         let mut buf = String::new();
                         std::io::stdin().read_line(&mut buf).ok();
-                        buf.trim().to_string()
+                        let input = buf.trim().to_string();
+                        if input.is_empty() && !dirs.is_empty() {
+                            format!("{}/{}", crate::config::backup_base(), dirs[0])
+                        } else {
+                            input
+                        }
                     })
                 );
                 adb::restore_android(&backup_dir)?;

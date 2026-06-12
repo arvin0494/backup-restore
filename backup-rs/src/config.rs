@@ -58,6 +58,42 @@ pub fn extra_backup_dirs() -> Vec<String> {
         .unwrap_or_default()
 }
 
+// ── ANDROID SKIP DIRECTORIES ───────────────────────────────
+// Which media directories to skip when backing up Android.
+// Set in the config file with ANDROID_SKIP_DIRS.
+// Example: ANDROID_SKIP_DIRS=Music,Download
+pub fn android_skip_dirs() -> Vec<String> {
+    let cfg = load_user_config();
+    cfg.get("ANDROID_SKIP_DIRS")
+        .map(|s| s.split(',').map(|p| p.trim().to_string()).filter(|p| !p.is_empty()).collect())
+        .unwrap_or_default()
+}
+
+// ── ANDROID FTP CONFIG ─────────────────────────────────────
+// If set, the tool uses rclone copy via FTP instead of adb pull.
+// The FTP server (e.g. CX File Explorer) must be running on the phone.
+// Example:
+//   ANDROID_FTP_HOST=192.168.44.13
+//   ANDROID_FTP_PORT=5502
+//   ANDROID_FTP_USER=ftp
+//   ANDROID_FTP_PASS=1111
+pub fn android_ftp_host() -> Option<String> {
+    let cfg = load_user_config();
+    cfg.get("ANDROID_FTP_HOST").cloned()
+}
+pub fn android_ftp_port() -> String {
+    let cfg = load_user_config();
+    cfg.get("ANDROID_FTP_PORT").cloned().unwrap_or_else(|| "2121".to_string())
+}
+pub fn android_ftp_user() -> String {
+    let cfg = load_user_config();
+    cfg.get("ANDROID_FTP_USER").cloned().unwrap_or_else(|| "ftp".to_string())
+}
+pub fn android_ftp_pass() -> String {
+    let cfg = load_user_config();
+    cfg.get("ANDROID_FTP_PASS").cloned().unwrap_or_else(|| "0000".to_string())
+}
+
 fn get_config_path() -> PathBuf {
     let home = std::env::var("HOME").unwrap_or_else(|_| "/root".into());
     PathBuf::from(home).join(".config").join("backup-restore").join("config")
