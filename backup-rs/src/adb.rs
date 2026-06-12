@@ -94,7 +94,6 @@ fn ftp_copy(src: &str, dst: &str, host: &str, port: &str, user: &str, pass: &str
             &format!(":ftp:{}", src),
             dst,
             "--progress",
-            "--stats=1s",
             "--ftp-host", host,
             "--ftp-port", port,
             "--ftp-user", user,
@@ -106,26 +105,32 @@ fn ftp_copy(src: &str, dst: &str, host: &str, port: &str, user: &str, pass: &str
 
     let stderr = child.stderr.take().unwrap();
     let reader = BufReader::new(stderr);
+    let mut transferred_data = String::new();
     let mut bytes = 0u64;
     let mut files = 0u64;
     let mut total = 0u64;
 
-    for line in reader.lines() {
-        let line = line.unwrap_or_default();
-        let line = line.trim_end_matches('\r').to_string();
-        if line.starts_with("Transferred:") || line.starts_with("Checks:") {
-            eprint!("\r{}", line);
-            let _ = std::io::stderr().flush();
-        } else if !line.is_empty() {
-            eprintln!();
-            eprintln!("{}", line);
-        }
-        if let Some(b) = parse_rclone_data(&line) {
-            bytes = b;
-        } else if let Some(f) = parse_rclone_files(&line) {
-            files = f;
-        } else if let Some(t) = parse_rclone_checks(&line) {
-            total = t;
+    for result in reader.lines() {
+        let raw = result.unwrap_or_default();
+        for part in raw.split('\r') {
+            let line = part.trim().to_string();
+            if line.is_empty() { continue; }
+            if line.starts_with("Transferred:") || line.starts_with("Checks:") {
+                if line != transferred_data {
+                    eprint!("\r{}", line);
+                    let _ = std::io::stderr().flush();
+                    transferred_data = line.clone();
+                }
+            } else if line.starts_with("Elapsed time") {
+                eprintln!("\r{}", line);
+            }
+            if let Some(b) = parse_rclone_data(&line) {
+                bytes = b;
+            } else if let Some(f) = parse_rclone_files(&line) {
+                files = f;
+            } else if let Some(t) = parse_rclone_checks(&line) {
+                total = t;
+            }
         }
     }
     eprintln!();
