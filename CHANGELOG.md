@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.1.0 — 2026-06-12
+
+- **Android backup via FTP**: rclone copy over FTP instead of adb pull — incremental, skips unchanged files, shows real-time progress
+- **Config-based FTP**: `ANDROID_FTP_HOST`/`PORT`/`USER`/`PASS` in config file; falls back to ADB pull if unset
+- **Smart ADB pull skip**: local directories already backed up are skipped on re-run (instant re-runs)
+- **`ANDROID_SKIP_DIRS`**: exclude media directories (Music, Download, MIUI, etc.) from Android backup
+- **CX File Explorer integration**: auto-starts FTP server via ADB intent, or waits for manual start
+- **Android restore improvements**: lists available backups and auto-selects when no path given
+- **Removed `--wifi` flag**: no longer needed — device must already be connected via ADB
+
 ## v1.0.0 — 2026-06-10
 
 - **Pacman-style animated progress bar**: install and uninstall scripts now feature a themed box-drawing banner, braille spinner, diamond status indicators, and section-based output matching backup-games
