@@ -1,4 +1,5 @@
 use crate::util::*;
+use std::io::{BufRead, BufReader, Write};
 use std::net::TcpStream;
 use std::path::Path;
 use std::process::Command;
@@ -81,13 +82,13 @@ fn wait_for_ftp(host: &str, port: &str, timeout_secs: u64) -> bool {
 // ── RCLONE COPY VIA FTP ──────────────────────────────────
 // Uses rclone's FTP backend to copy files incrementally.
 // Only transfers new/changed files — identical files are skipped.
-fn ftp_copy(src: &str, dst: &str, host: &str, port: &str, user: &str, pass: &str) -> anyhow::Result<()> {
+fn ftp_copy(src: &str, dst: &str, host: &str, port: &str, user: &str, pass: &str) -> anyhow::Result<u64> {
     let _ = std::fs::create_dir_all(dst);
 
     let obs_pass = run_stdout(&format!("rclone obscure '{}'", pass));
     let obs_pass = obs_pass.trim().to_string();
 
-    let status = Command::new("rclone")
+    let mut child = Command::new("rclone")
         .args(&[
             "copy",
             &format!(":ftp:{}", src),
@@ -99,15 +100,49 @@ fn ftp_copy(src: &str, dst: &str, host: &str, port: &str, user: &str, pass: &str
             "--ftp-user", user,
             "--ftp-pass", &obs_pass,
         ])
-        .stdout(std::process::Stdio::inherit())
-        .stderr(std::process::Stdio::inherit())
-        .status()?;
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::piped())
+        .spawn()?;
 
+    let stderr = child.stderr.take().unwrap();
+    let reader = BufReader::new(stderr);
+    let mut transferred = 0u64;
+
+    for line in reader.lines() {
+        let line = line.unwrap_or_default();
+        let line = line.trim_end_matches('\r').to_string();
+        print!("{}\r", line);
+        let _ = std::io::stdout().flush();
+        if let Some(bytes) = parse_rclone_transferred(&line) {
+            transferred = bytes;
+        }
+    }
+
+    let status = child.wait()?;
     if !status.success() {
         return Err(anyhow::anyhow!("rclone copy via FTP failed: {} -> {}", src, dst));
     }
 
-    Ok(())
+    Ok(transferred)
+}
+
+fn parse_rclone_transferred(line: &str) -> Option<u64> {
+    let after = line.split_once("Transferred:")?.1.trim();
+    let first = after.split_once('/')?.0.trim();
+    if first.contains('%') {
+        return None;
+    }
+    let parts: Vec<&str> = first.split_whitespace().collect();
+    if parts.len() < 2 { return None; }
+    let val: f64 = parts[0].parse().ok()?;
+    match parts[1] {
+        "TiB" => Some((val * 1024.0 * 1024.0 * 1024.0 * 1024.0) as u64),
+        "GiB" => Some((val * 1024.0 * 1024.0 * 1024.0) as u64),
+        "MiB" => Some((val * 1024.0 * 1024.0) as u64),
+        "KiB" => Some((val * 1024.0) as u64),
+        "B" => Some(val as u64),
+        _ => None,
+    }
 }
 
 pub fn push(src: &str, dest: &str) -> anyhow::Result<()> {
@@ -174,15 +209,17 @@ pub fn backup_android() -> anyhow::Result<()> {
     }
 
     e("Copying media via FTP (rclone)...");
+    let mut total = 0u64;
     for dir in &["DCIM", "Download", "Pictures", "Movies", "Music", "MIUI"] {
         let src = format!("/device/{}", dir);
         let dst = format!("{}/{}", phone_dir, dir);
-        e(&format!("  {}{}{} → ...", W, dir, N));
-        if let Err(err) = ftp_copy(&src, &dst, &ftp_host, &ftp_port, &ftp_user, &ftp_pass) {
-            e(&format!("  {} {} copy failed: {}{}", R, dir, err, N));
+        match ftp_copy(&src, &dst, &ftp_host, &ftp_port, &ftp_user, &ftp_pass) {
+            Ok(bytes) => total += bytes,
+            Err(err) => e(&format!("  {} {} copy failed: {}{}", R, dir, err, N)),
         }
     }
-    e(&format!("  {}All media up to date — only new/changed files on re-runs{}", Y, N));
+    let total_fmt = fmt(total);
+    e(&format!("  {}Media copied: {}{}", C, total_fmt, N));
 
     ftp_stop();
 
