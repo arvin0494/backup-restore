@@ -11,10 +11,8 @@ Backup your Linux system before reinstalling, then restore everything after.
 - **Size estimation** — `gdu` scans home subdirs in parallel with package lists
 - **Virt-manager** — libvirt VM configs (`/etc/libvirt/qemu`) and disk images (`/var/lib/libvirt/images`)
 - **Android backup** — SMS, contacts, call logs, installed apps, device properties
-- **Android media via ADB or FTP** — DCIM, Download, Pictures, Movies, Music, MIUI
-- **FTP mode** — rclone copy over FTP for incremental, skip-unchanged Android backups
-- **Smart ADB re-run** — already-downloaded directories are skipped, near-instant re-runs
-- **`ANDROID_SKIP_DIRS`** — exclude unwanted media directories from Android backup
+- **Android media via FTP** — rclone copy over FTP (DCIM, Download, Pictures, Movies, Music, MIUI)
+- **Incremental** — only new/changed files are transferred on re-runs
 - **Auto-detect path** — `/mnt/HDD4T/BACKUP/{hostname}[-{os_id}]`
 - **Live progress** — rclone `--progress` with file names, speed, ETA
 - **Drive-aware** — `--checkers` / `--transfers` tuned to HDD (3), SSD (8), or NVMe (16)
@@ -65,14 +63,13 @@ ANDROID_FTP_HOST=192.168.44.13
 ANDROID_FTP_PORT=2121
 ANDROID_FTP_USER=ftp
 ANDROID_FTP_PASS=0000
-ANDROID_SKIP_DIRS=Music,Download
 ```
 
 Only the keys you specify need to be included — missing keys fall back to the built-in defaults above.
 
 `BACKUP_EXTRA_DIRS` takes a comma-separated list of directories. Each is backed up to `dest/extra/<basename>/` and shown as a separate item in the restore menu.
 
-`ANDROID_FTP_*` enables FTP-based Android backup (rclone copy, incremental). `ANDROID_SKIP_DIRS` excludes directories from Android backup.
+`ANDROID_FTP_*` configures FTP-based Android backup (required).
 
 ### Backup
 
@@ -100,31 +97,16 @@ bckup -r /path/to/backup -y
 ### Android
 
 ```bash
-# Backup Android device (ADB must be connected)
+# Backup Android device (ADB + FTP server required)
 bckup --device android -b
 
 # Restore Android device
 bckup --device android -r
 ```
 
-#### FTP mode (faster incremental backups)
-
-Add to `~/.config/backup-restore/config`:
-
-```ini
-ANDROID_FTP_HOST=192.168.44.13
-ANDROID_FTP_PORT=2121
-ANDROID_FTP_USER=ftp
-ANDROID_FTP_PASS=0000
-```
-
-Start an FTP server on your phone (CX File Explorer → Network → FTP, or any FTP server app). The tool uses `rclone copy` over FTP — only new/changed files are transferred on re-runs.
-
-#### Skip directories
-
-```ini
-ANDROID_SKIP_DIRS=Music,Download,MIUI
-```
+Set `ANDROID_FTP_HOST` (and optionally PORT/USER/PASS) in config.
+Start an FTP server on your phone (CX File Explorer → Network → FTP, or any FTP server app).
+The tool uses `rclone copy` over FTP — only new/changed files are transferred on re-runs.
 
 ### Interactive menu
 

@@ -1,5 +1,4 @@
 use crate::util::*;
-use std::io::{BufRead, BufReader};
 use std::net::TcpStream;
 use std::path::Path;
 use std::process::Command;
@@ -14,33 +13,6 @@ fn adb(args: &[&str]) -> anyhow::Result<String> {
         return Err(anyhow::anyhow!("adb {} failed: {}", args.join(" "), stderr.trim()));
     }
     Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
-}
-
-pub struct PullStats {
-    pub files_pulled: u64,
-    pub files_skipped: u64,
-    pub bytes: u64,
-}
-
-fn parse_pull_stats(line: &str) -> PullStats {
-    let parts: Vec<&str> = line.split_whitespace().collect();
-    let mut pulled = 0u64;
-    let mut skipped = 0u64;
-    let mut bytes = 0u64;
-
-    for (i, part) in parts.iter().enumerate() {
-        if *part == "files" && i + 1 < parts.len() && parts[i + 1] == "pulled," {
-            pulled = parts[i - 1].parse().unwrap_or(0);
-        }
-        if *part == "skipped." && i > 0 {
-            skipped = parts[i - 1].trim_end_matches(',').parse().unwrap_or(0);
-        }
-        if *part == "bytes" && i > 0 {
-            bytes = parts[i - 1].trim_start_matches('(').parse().unwrap_or(0);
-        }
-    }
-
-    PullStats { files_pulled: pulled, files_skipped: skipped, bytes }
 }
 
 pub fn available() -> bool {
@@ -65,35 +37,6 @@ fn device_model() -> String {
     } else {
         model.to_string()
     }
-}
-
-pub fn pull(src: &str, dest: &str) -> anyhow::Result<PullStats> {
-    let _ = std::fs::create_dir_all(dest);
-    let mut child = Command::new("adb")
-        .args(&["pull", src, dest])
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::inherit())
-        .spawn()?;
-
-    let mut last_line = String::new();
-    if let Some(stdout) = child.stdout.take() {
-        let reader = BufReader::new(stdout);
-        for line in reader.lines() {
-            if let Ok(line) = line {
-                println!("{}", line);
-                if !line.trim().is_empty() {
-                    last_line = line;
-                }
-            }
-        }
-    }
-
-    let status = child.wait()?;
-    if !status.success() {
-        return Err(anyhow::anyhow!("adb pull {} {} failed", src, dest));
-    }
-
-    Ok(parse_pull_stats(&last_line))
 }
 
 // ── FTP SERVER CONTROL ────────────────────────────────────
@@ -138,7 +81,7 @@ fn wait_for_ftp(host: &str, port: &str, timeout_secs: u64) -> bool {
 // ── RCLONE COPY VIA FTP ──────────────────────────────────
 // Uses rclone's FTP backend to copy files incrementally.
 // Only transfers new/changed files — identical files are skipped.
-fn ftp_copy(src: &str, dst: &str, host: &str, port: &str, user: &str, pass: &str) -> anyhow::Result<PullStats> {
+fn ftp_copy(src: &str, dst: &str, host: &str, port: &str, user: &str, pass: &str) -> anyhow::Result<()> {
     let _ = std::fs::create_dir_all(dst);
 
     let obs_pass = run_stdout(&format!("rclone obscure '{}'", pass));
@@ -164,12 +107,7 @@ fn ftp_copy(src: &str, dst: &str, host: &str, port: &str, user: &str, pass: &str
         return Err(anyhow::anyhow!("rclone copy via FTP failed: {} -> {}", src, dst));
     }
 
-    // Count local files as a rough stats estimate
-    let file_count = std::fs::read_dir(dst).ok()
-        .map(|e| e.flatten().filter(|e| e.path().is_file()).count() as u64)
-        .unwrap_or(0);
-
-    Ok(PullStats { files_pulled: file_count, files_skipped: 0, bytes: 0 })
+    Ok(())
 }
 
 pub fn push(src: &str, dest: &str) -> anyhow::Result<()> {
@@ -237,125 +175,39 @@ pub fn backup_android(_dest: &str) -> anyhow::Result<()> {
     e(&format!("Device: {}{}{}", C, serial, N));
     e(&format!("Dest:   {}{}{}", W, phone_dir, N));
 
-    let mut total_pulled = 0u64;
-    let mut total_skipped = 0u64;
-    let mut total_bytes = 0u64;
-    let skip_dirs = crate::config::android_skip_dirs();
-
-    fn local_file_count(dir: &str) -> u64 {
-        std::fs::read_dir(dir).ok()
-            .map(|e| e.flatten().filter(|e| e.path().is_file()).count() as u64)
-            .unwrap_or(0)
-    }
-
-    // Check if FTP mode is configured
-    let use_ftp = crate::config::android_ftp_host().is_some();
-    let ftp_host = crate::config::android_ftp_host();
+    let ftp_host = crate::config::android_ftp_host()
+        .unwrap_or_else(|| {
+            e(&format!("{}ANDROID_FTP_HOST not set in config{}", Y, N));
+            std::process::exit(1);
+        });
     let ftp_port = crate::config::android_ftp_port();
     let ftp_user = crate::config::android_ftp_user();
     let ftp_pass = crate::config::android_ftp_pass();
 
-    let (ftp_host, ftp_port, ftp_user, ftp_pass) = if use_ftp {
-        let h = ftp_host.as_deref().unwrap_or("localhost");
-        let p = &ftp_port;
-        let u = &ftp_user;
-        let pw = &ftp_pass;
-        e("Starting FTP server on phone...");
-        ftp_start();
-        if wait_for_ftp(h, p, 10) {
-            e(&format!("  {}FTP connected {}:{} {}", G, h, p, N));
-        } else {
-            e(&format!("  {}Could not reach FTP server at {}:{}{}", Y, h, p, N));
-            e("  Start the FTP server manually in CX File Explorer (Network → FTP)");
-            e("  Waiting longer...");
-            if !wait_for_ftp(h, p, 60) {
-                return Err(anyhow::anyhow!("FTP server not reachable"));
-            }
+    e("Starting FTP server on phone...");
+    ftp_start();
+    if wait_for_ftp(&ftp_host, &ftp_port, 10) {
+        e(&format!("  {}FTP connected {}:{} {}", G, ftp_host, ftp_port, N));
+    } else {
+        e(&format!("  {}Could not reach FTP server at {}:{}{}", Y, ftp_host, ftp_port, N));
+        e("  Start the FTP server manually in CX File Explorer (Network → FTP)");
+        e("  Waiting longer...");
+        if !wait_for_ftp(&ftp_host, &ftp_port, 60) {
+            return Err(anyhow::anyhow!("FTP server not reachable"));
         }
-        (h.to_string(), p.clone(), u.clone(), pw.clone())
-    } else {
-        (String::new(), String::new(), String::new(), String::new())
-    };
-
-    let media_dirs: &[&str] = &["DCIM", "Download", "Pictures", "Movies", "Music"];
-
-    if use_ftp {
-        e("Copying media via FTP (rclone)...");
-    } else {
-        e("Pulling media via ADB...");
     }
 
-    for dir in media_dirs {
-        if skip_dirs.iter().any(|d| d.eq_ignore_ascii_case(dir)) {
-            e(&format!("  {}{}{} → {} skipped (config)", W, dir, N, Y));
-            continue;
-        }
+    e("Copying media via FTP (rclone)...");
+    for dir in &["DCIM", "Download", "Pictures", "Movies", "Music", "MIUI"] {
+        let src = format!("/device/{}", dir);
         let dst = format!("{}/{}", phone_dir, dir);
-
-        if use_ftp {
-            let src = format!("/device/{}", dir);
-            let label = format!("  {}{}{} → ...", W, dir, N);
-            e(&label);
-            match ftp_copy(&src, &dst, &ftp_host, &ftp_port, &ftp_user, &ftp_pass) {
-                Ok(stats) => {
-                    total_pulled += stats.files_pulled;
-                    total_skipped += stats.files_skipped;
-                    total_bytes += stats.bytes;
-                }
-                Err(err) => {
-                    e(&format!("  {} FTP copy failed for {}: {}{}", R, dir, err, N));
-                }
-            }
-        } else {
-            let src = format!("/sdcard/{}", dir);
-            let existing = local_file_count(&dst);
-            if existing > 0 {
-                total_skipped += existing;
-                e(&format!("  {}{}{} → {} (already backed up, {} files skipped)", W, dir, N, C, existing));
-                continue;
-            }
-            e(&format!("  {}{}{} → ...", W, dir, N));
-            if let Ok(stats) = pull(&src, &dst) {
-                total_pulled += stats.files_pulled;
-                total_skipped += stats.files_skipped;
-                total_bytes += stats.bytes;
-            }
+        e(&format!("  {}{}{} → ...", W, dir, N));
+        if let Err(err) = ftp_copy(&src, &dst, &ftp_host, &ftp_port, &ftp_user, &ftp_pass) {
+            e(&format!("  {} {} copy failed: {}{}", R, dir, err, N));
         }
     }
 
-    if !skip_dirs.iter().any(|d| d.eq_ignore_ascii_case("MIUI")) {
-        if use_ftp {
-            let dst = format!("{}/MIUI", phone_dir);
-            e(&format!("  {}{}{} → ...", W, "MIUI", N));
-            if let Ok(stats) = ftp_copy("/device/MIUI/", &dst, &ftp_host, &ftp_port, &ftp_user, &ftp_pass) {
-                total_pulled += stats.files_pulled;
-                total_skipped += stats.files_skipped;
-                total_bytes += stats.bytes;
-            }
-        } else {
-            e("Pulling MIUI data...");
-            if let Ok(out) = shell("ls /sdcard/MIUI/") {
-                if !out.is_empty() {
-                    let dst = format!("{}/MIUI", phone_dir);
-                    let existing = local_file_count(&dst);
-                    if existing > 0 {
-                        total_skipped += existing;
-                        e(&format!("  {}{}{} → {} (already backed up, {} files skipped)", W, "MIUI", N, C, existing));
-                    } else if let Ok(stats) = pull("/sdcard/MIUI/", &dst) {
-                        total_pulled += stats.files_pulled;
-                        total_skipped += stats.files_skipped;
-                        total_bytes += stats.bytes;
-                    }
-                }
-            }
-        }
-    } else {
-        e(&format!("  {}{}{} → {} skipped (config)", W, "MIUI", N, Y));
-    }
-
-    if use_ftp {
-        ftp_stop();
-    }
+    ftp_stop();
 
     e("Saving SMS...");
     let sms_path = format!("{}/sms.json", phone_dir);
@@ -392,10 +244,6 @@ pub fn backup_android(_dest: &str) -> anyhow::Result<()> {
 
     e(&format!("{}{}Android backup complete!{}", BOLD, G, N));
     e(&format!("Location: {}{}{}", W, phone_dir, N));
-    e(&format!(
-        "  {} {} pulled, {} skipped, {} total",
-        C, total_pulled, total_skipped, fmt(total_bytes)
-    ));
 
     Ok(())
 }

@@ -58,19 +58,8 @@ pub fn extra_backup_dirs() -> Vec<String> {
         .unwrap_or_default()
 }
 
-// ── ANDROID SKIP DIRECTORIES ───────────────────────────────
-// Which media directories to skip when backing up Android.
-// Set in the config file with ANDROID_SKIP_DIRS.
-// Example: ANDROID_SKIP_DIRS=Music,Download
-pub fn android_skip_dirs() -> Vec<String> {
-    let cfg = load_user_config();
-    cfg.get("ANDROID_SKIP_DIRS")
-        .map(|s| s.split(',').map(|p| p.trim().to_string()).filter(|p| !p.is_empty()).collect())
-        .unwrap_or_default()
-}
-
 // ── ANDROID FTP CONFIG ─────────────────────────────────────
-// If set, the tool uses rclone copy via FTP instead of adb pull.
+// The tool uses rclone copy via FTP (adb pull is not used for backup).
 // The FTP server (e.g. CX File Explorer) must be running on the phone.
 // Example:
 //   ANDROID_FTP_HOST=192.168.44.13

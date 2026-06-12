@@ -196,8 +196,8 @@ BACKUP_BASE=/mnt/HDD4T/BACKUP
 # BACKUP_EXTRA_DIRS=/path/to/something,/another/path
 
 # ── Android FTP backup ───────────────────────────────────
-# Uses rclone copy via FTP instead of adb pull.
-# Incremental — only transfers new/changed files.
+# Uses rclone copy via FTP. Incremental — only new/changed files.
+# Required for Android backup.
 #
 # Setup (CX File Explorer):
 #   1. Open CX File Explorer → Network tab → FTP
