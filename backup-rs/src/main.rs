@@ -14,6 +14,7 @@ mod backup;   // 📦  backup  — saves your files to a safe place
 mod config;   // ⚙️  config  — reads your settings from disk
 mod restore;  // 🔄  restore — brings your files back
 mod util;     // 🛠️  util    — helper tools used everywhere
+mod adb;      // 📱  adb     — Android device backup
 
 // A place to store your home folder path (~/) so every part of
 // the program can use it.
@@ -31,6 +32,7 @@ fn main() -> anyhow::Result<()> {
     //   bckup -b       → backup
     //   bckup -r       → restore
     //   bckup -y       → auto-confirm everything
+    //   bckup --device android   → Android phone backup
     #[derive(Parser)]
     #[command(name = "backup", version, about = "Backup & restore for Linux reinstall")]
     struct Cli {
@@ -45,6 +47,9 @@ fn main() -> anyhow::Result<()> {
 
         #[arg(short = 'y', long = "yes")]
         yes: bool,                        // "-y" to skip questions
+
+        #[arg(long = "device")]
+        device: Option<String>,           // "--device android"
     }
 
     // Read what the user typed on the command line
@@ -52,6 +57,44 @@ fn main() -> anyhow::Result<()> {
 
     // Make sure rclone, gdu, and fzf are installed
     util::install_deps();
+
+    // Android device mode
+    if let Some(device) = &cli.device {
+        if device == "android" {
+            if !adb::available() {
+                util::e(&format!("{}adb not found or no device connected{}", util::R, util::N));
+                return Ok(());
+            }
+            if cli.restore.is_some() {
+                let backup_dir = cli.restore.unwrap().unwrap_or_else(||
+                    cli.dest.clone().unwrap_or_else(|| {
+                        let dirs = adb::list_android_dirs();
+                        if !dirs.is_empty() {
+                            eprintln!("  Available Android backups:");
+                            for d in &dirs {
+                                eprintln!("    {}{}{}", util::C, d, util::N);
+                            }
+                        }
+                        print!("  Backup directory: ");
+                        std::io::stdout().flush().ok();
+                        let mut buf = String::new();
+                        std::io::stdin().read_line(&mut buf).ok();
+                        let input = buf.trim().to_string();
+                        if input.is_empty() && !dirs.is_empty() {
+                            format!("{}/{}", crate::config::backup_base(), dirs[0])
+                        } else {
+                            input
+                        }
+                    })
+                );
+                adb::restore_android(&backup_dir)?;
+            } else {
+                let dest = cli.dest.unwrap_or_else(util::detect_path);
+                adb::backup_android(&dest)?;
+            }
+            return Ok(());
+        }
+    }
 
     // If no flags were given, run the interactive menu (default = backup)
     if cli.backup.is_none() && cli.restore.is_none() {

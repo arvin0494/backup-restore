@@ -186,7 +186,7 @@ create_config() {
         return
     fi
     mkdir -p "$cfg_dir"
-    cat > "$cfg_file" <<EOF
+    cat > "$cfg_file" <<'EOF'
 # backup-restore configuration
 # Uncomment and edit to override defaults.
 
@@ -194,6 +194,24 @@ BACKUP_BASE=/mnt/HDD4T/BACKUP
 # VM_QEMU_SRC=/etc/libvirt/qemu
 # VM_IMAGES_SRC=/var/lib/libvirt/images
 # BACKUP_EXTRA_DIRS=/path/to/something,/another/path
+
+# ── Android FTP backup ───────────────────────────────────
+# Uses rclone copy via FTP instead of adb pull.
+# Incremental — only transfers new/changed files.
+#
+# Setup (CX File Explorer):
+#   1. Open CX File Explorer → Network tab → FTP
+#   2. Tap "Start" (set port/password if needed)
+#   3. Add the settings below to this file
+#
+# Setup (any FTP server app):
+#   Install "WiFi FTP Server" or similar from Play Store
+#   Start the server and note host/port/user/pass
+#
+# ANDROID_FTP_HOST=192.168.44.13
+# ANDROID_FTP_PORT=2121
+# ANDROID_FTP_USER=ftp
+# ANDROID_FTP_PASS=0000
 EOF
     ok "Config" "$cfg_file"
 }
