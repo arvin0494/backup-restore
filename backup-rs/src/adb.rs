@@ -1,5 +1,5 @@
 use crate::util::*;
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Write};
 use std::net::TcpStream;
 use std::path::Path;
 use std::process::Command;
@@ -113,7 +113,13 @@ fn ftp_copy(src: &str, dst: &str, host: &str, port: &str, user: &str, pass: &str
     for line in reader.lines() {
         let line = line.unwrap_or_default();
         let line = line.trim_end_matches('\r').to_string();
-        eprintln!("{}", line);
+        if line.starts_with("Transferred:") || line.starts_with("Checks:") {
+            eprint!("\r{}", line);
+            let _ = std::io::stderr().flush();
+        } else if !line.is_empty() {
+            eprintln!();
+            eprintln!("{}", line);
+        }
         if let Some(b) = parse_rclone_data(&line) {
             bytes = b;
         } else if let Some(f) = parse_rclone_files(&line) {
@@ -122,6 +128,7 @@ fn ftp_copy(src: &str, dst: &str, host: &str, port: &str, user: &str, pass: &str
             total = t;
         }
     }
+    eprintln!();
 
     let status = child.wait()?;
     if !status.success() {
