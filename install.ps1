@@ -70,14 +70,19 @@ function Ensure-Rust {
         Invoke-WebRequest -Uri "https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-msvc/rustup-init.exe" -OutFile $RUSTUP_EXE -UseBasicParsing
     }
 
-    Show-Step "Installing Rust..."
-    # Run rustup-init with -y for non-interactive install
-    $out = & $RUSTUP_EXE -y --default-toolchain stable --no-modify-path 2>&1
-    Write-Host $out
-    $rc = $LASTEXITCODE
+    Show-Step "Installing Rust (this may take several minutes)..."
+    Show-Info "rustup-init will open a console window. Wait for it to finish."
 
-    if ($rc -ne 0) {
-        Show-Fail "rustup-init exited with code $rc."
+    # Launch rustup-init in its own console window so errors are visible
+    $proc = Start-Process -FilePath $RUSTUP_EXE -ArgumentList "-y", "--default-toolchain", "stable", "--no-modify-path" -Wait -PassThru -NoNewWindow:$false
+
+    if ($proc.ExitCode -ne 0) {
+        Write-Host ""
+        Write-Host ""
+        Write-Host "  FAIL: rustup-init failed with exit code $($proc.ExitCode)." -ForegroundColor Red
+        Write-Host "  Copy the error above, then press Enter to exit." -ForegroundColor Yellow
+        Read-Host
+        exit 1
     }
 
     $env:PATH = "$env:USERPROFILE\.cargo\bin;$env:PATH"
@@ -88,7 +93,15 @@ function Ensure-Rust {
         $ver = & rustc --version 2>&1
         Show-Ok "Rust $ver"
     } else {
-        Show-Fail "Rust installation failed. Try running $RUSTUP_EXE manually."
+        Write-Host ""
+        Write-Host "  FAIL: Rust installed but rustc not found in PATH." -ForegroundColor Red
+        Write-Host "  Try closing this window and reopening PowerShell, then run:" -ForegroundColor Yellow
+        Write-Host "    . `$env:USERPROFILE\.cargo\env" -ForegroundColor Cyan
+        Write-Host "  Then run this script again." -ForegroundColor Yellow
+        Write-Host ""
+        Write-Host "  Press Enter to exit." -ForegroundColor Yellow
+        Read-Host
+        exit 1
     }
 }
 
