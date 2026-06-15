@@ -1,6 +1,14 @@
 # backup-restore installer for Windows
 # Uses bundled deps/ folder. Downloads only if deps are missing.
 
+# Auto-elevate to Administrator if needed (required for PATH modification)
+$isAdmin = [Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()
+if (-not $isAdmin.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    $scriptPath = $MyInvocation.MyCommand.Path
+    Start-Process powershell -ArgumentList "-NoProfile", "-ExecutionPolicy Bypass", "-File", "`"$scriptPath`"" -Verb RunAs
+    exit
+}
+
 $ErrorActionPreference = "Continue"
 
 $REPO       = "arvin0494/backup-restore"
@@ -66,7 +74,7 @@ function Ensure-Rust {
     $env:RUSTUP_INIT_NON_INTERACTIVE = "1"
     $env:RUSTUP_INIT_NO_MODIFY_PATH = "1"
     try {
-        & $RUSTUP_EXE default-toolchain stable -y 2>&1 | Out-Null
+        & $RUSTUP_EXE default-toolchain stable 2>&1 | Out-Null
         $env:PATH = "$env:USERPROFILE\.cargo\bin;$env:PATH"
         [System.Environment]::SetEnvironmentVariable("PATH", $env:PATH, "User")
     } catch {
