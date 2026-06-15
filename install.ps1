@@ -66,43 +66,64 @@ function Ensure-Rust {
 
     Write-Host ""
     Show-Warn "Rust is not installed."
-    Write-Host "    1) rustup (recommended)"
-    Write-Host "    2) winget install Rustlang.Rustup"
-    Write-Host "    3) skip - I will install it myself"
-    Write-Host ""
-    $ans = Read-Host "  Choose [1]"
-    if ($ans -eq "" -or $ans -eq "1") {
-        Show-Step "Installing rustup..."
-        $rustupPath = "$env:TEMP\rustup-init.exe"
-        Invoke-WebRequest -Uri "https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-msvc/rustup-init.exe" -OutFile $rustupPath -UseBasicParsing
-        & $rustupPath /y --no-modify-path 2>&1 | Out-Null
-        Remove-Item $rustupPath -ErrorAction SilentlyContinue
+
+    # Try winget first (more reliable on IoT LTSC)
+    if (Test-Command winget) {
+        Show-Step "Installing Rust via winget..."
+        try {
+            $result = winget install --id Rustlang.Rustup -e --silent --accept-package-agreements --accept-source-agreements 2>&1
+            Write-Host $result
+        } catch {
+            Show-Warn "winget install failed: $_"
+        }
         if (Test-Path "$env:USERPROFILE\.cargo\bin") {
             $env:PATH = "$env:USERPROFILE\.cargo\bin;$env:PATH"
         }
+        Start-Sleep -Seconds 5
         if (Test-Command rustc) {
             $ver = & rustc --version 2>&1
             Show-Ok "Rust $ver"
+            return
         } else {
-            Show-Fail "Rust installation failed. Install manually: https://rustup.rs"
+            Show-Warn "winget install completed but rustc not found."
         }
-    } elseif ($ans -eq "2") {
-        Show-Step "Installing via winget..."
-        if (Test-Command winget) {
-            winget install --id Rustlang.Rustup -e --silent --accept-package-agreements --accept-source-agreements 2>&1 | Out-Null
-            if (Test-Path "$env:USERPROFILE\.cargo\bin") {
-                $env:PATH = "$env:USERPROFILE\.cargo\bin;$env:PATH"
-            }
-            if (Test-Command rustc) {
-                $ver = & rustc --version 2>&1
-                Show-Ok "Rust $ver"
-                return
-            }
-        }
-        Show-Fail "winget not found or install failed. Install manually: https://rustup.rs"
     } else {
-        Show-Fail "Rust is required."
+        Show-Warn "winget not available."
     }
+
+    # Fallback to rustup
+    Show-Step "Installing via rustup..."
+    $rustupPath = "$env:TEMP\rustup-init.exe"
+    try {
+        Show-Step "Downloading rustup..."
+        Invoke-WebRequest -Uri "https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-msvc/rustup-init.exe" -OutFile $rustupPath -UseBasicParsing -ErrorAction Stop
+        Show-Ok "Downloaded"
+    } catch {
+        Show-Fail "Download failed: $_. Install manually: https://rustup.rs"
+    }
+
+    Show-Step "Installing rustup..."
+    try {
+        $installOut = & $rustupPath /y --no-modify-path 2>&1
+        Write-Host $installOut
+    } catch {
+        Show-Fail "Install failed: $_"
+    }
+
+    Remove-Item $rustupPath -ErrorAction SilentlyContinue
+
+    if (Test-Path "$env:USERPROFILE\.cargo\bin") {
+        $env:PATH = "$env:USERPROFILE\.cargo\bin;$env:PATH"
+    }
+
+    Start-Sleep -Seconds 3
+    if (Test-Command rustc) {
+        $ver = & rustc --version 2>&1
+        Show-Ok "Rust $ver"
+        return
+    }
+
+    Show-Fail "Rust installation failed. Install manually: https://rustup.rs"
 }
 
 # --- 2. FZF ---
