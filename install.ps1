@@ -70,20 +70,18 @@ function Ensure-Rust {
         Invoke-WebRequest -Uri "https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-msvc/rustup-init.exe" -OutFile $RUSTUP_EXE -UseBasicParsing
     }
 
-    Show-Step "Installing Rust (non-interactive)..."
-    $env:RUSTUP_INIT_NON_INTERACTIVE = "1"
-    $env:RUSTUP_INIT_NO_MODIFY_PATH = "1"
-    try {
-        & $RUSTUP_EXE default-toolchain stable 2>&1 | Out-Null
-        $env:PATH = "$env:USERPROFILE\.cargo\bin;$env:PATH"
-        [System.Environment]::SetEnvironmentVariable("PATH", $env:PATH, "User")
-    } catch {
-        Show-Fail "Rust installation failed: $_"
+    Show-Step "Installing Rust..."
+    # Run rustup-init with -y for non-interactive install
+    $out = & $RUSTUP_EXE -y --default-toolchain stable --no-modify-path 2>&1
+    Write-Host $out
+    $rc = $LASTEXITCODE
+
+    if ($rc -ne 0) {
+        Show-Fail "rustup-init exited with code $rc."
     }
-    finally {
-        Remove-Item Env:\RUSTUP_INIT_NON_INTERACTIVE -ErrorAction SilentlyContinue
-        Remove-Item Env:\RUSTUP_INIT_NO_MODIFY_PATH -ErrorAction SilentlyContinue
-    }
+
+    $env:PATH = "$env:USERPROFILE\.cargo\bin;$env:PATH"
+    [System.Environment]::SetEnvironmentVariable("PATH", $env:PATH, "User")
 
     Start-Sleep -Seconds 3
     if (Test-Command rustc) {
