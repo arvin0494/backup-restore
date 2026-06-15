@@ -40,12 +40,41 @@ pub fn load_user_config() -> HashMap<String, String> {
     map
 }
 
+// ── FIND BEST DRIVE ────────────────────────────────────────
+// Checks if a drive letter exists and has at least 1GB free space.
+fn drive_has_space(drive: &str) -> bool {
+    let path = format!("{}\\", drive);
+    let ok = std::fs::metadata(&path).is_ok();
+    if !ok { return false; }
+    // Try to get free space via a simple file write test
+    let test_path = format!("{}\\.space_test", drive);
+    let written = std::fs::write(&test_path, "x").is_ok();
+    let _ = std::fs::remove_file(&test_path);
+    written
+}
+
 // ── BACKUP BASE ────────────────────────────────────────────
 // Where to save the backup. Uses the user's config if set,
-// otherwise falls back to the default (/mnt/HDD4T/BACKUP).
+// otherwise falls back to platform defaults.
+//
+// Linux: /mnt/HDD4T/BACKUP
+// Windows: tries E:\BACKUP, F:\BACKUP, D:\BACKUP, C:\BACKUP
 pub fn backup_base() -> String {
     let cfg = load_user_config();
-    cfg.get("BACKUP_BASE").cloned().unwrap_or_else(|| BACKUP_BASE_DEFAULT.to_string())
+    if let Some(base) = cfg.get("BACKUP_BASE") {
+        return base.clone();
+    }
+    
+    if crate::util::detect_platform() == "windows" {
+        for drive in &["E:", "F:", "D:", "C:"] {
+            if drive_has_space(drive) {
+                return format!("{}\\BACKUP", drive);
+            }
+        }
+        return "C:\\BACKUP".to_string();
+    }
+    
+    BACKUP_BASE_DEFAULT.to_string()
 }
 
 // ── EXTRA BACKUP DIRECTORIES ───────────────────────────────
@@ -179,9 +208,13 @@ pub const GDU_SCAN_DIRS: &[&str] = &[
 // A small file that remembers which folders were already
 // backed up and when they last changed. This lets the program
 // skip unchanged folders on subsequent backups.
-pub const MANIFEST_FILE: &str = "~/.local/share/backup-restore/manifest";
+pub const MANIFEST_FILE_LINUX: &str = "~/.local/share/backup-restore/manifest";
 
 pub fn manifest_path() -> String {
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/root".into());
-    MANIFEST_FILE.replacen('~', &home, 1)
+    if crate::util::detect_platform() == "windows" {
+        std::env::var("APPDATA").map(|a| format!("{}\\backup-restore\\manifest", a)).unwrap_or_else(|_| "C:\\Windows\\manifest".to_string())
+    } else {
+        let home = std::env::var("HOME").unwrap_or_else(|_| "/root".into());
+        MANIFEST_FILE_LINUX.replacen('~', &home, 1)
+    }
 }

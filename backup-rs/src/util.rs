@@ -203,18 +203,25 @@ pub fn fmt(size: u64) -> String {
 
 // ── DETECT BACKUP PATH ─────────────────────────────────────
 // Automatically figures out the backup destination:
-//   /mnt/HDD4T/BACKUP/{computer-name}[-{os-name}]
-// It uses the computer's hostname and the Linux distro name.
+//   Linux:  /mnt/HDD4T/BACKUP/{computer-name}[-{os-name}]
+//   Windows: E:\BACKUP\{computer-name}
+// It uses the computer's hostname.
 pub fn detect_path() -> String {
     let host = run_stdout("hostname -s");
     let host = if host.is_empty() { "unknown".into() } else { host };
-    let os_id = run_stdout(r#"grep -oP '(?<=^ID=).*' /etc/os-release | tr -d '"'"#);
-    let tag = if !os_id.is_empty() && !host.to_lowercase().contains(&os_id.to_lowercase()) {
-        format!("-{}", os_id)
+    let base = crate::config::backup_base();
+    
+    if detect_platform() == "windows" {
+        format!("{}\\{}", base, host)
     } else {
-        String::new()
-    };
-    format!("{}/{}{}", crate::config::backup_base(), host, tag)
+        let os_id = run_stdout(r#"grep -oP '(?<=^ID=).*' /etc/os-release | tr -d '"'"#);
+        let tag = if !os_id.is_empty() && !host.to_lowercase().contains(&os_id.to_lowercase()) {
+            format!("-{}", os_id)
+        } else {
+            String::new()
+        };
+        format!("{}/{}{}", base, host, tag)
+    }
 }
 
 // ── DETECT DRIVE TYPE ──────────────────────────────────────

@@ -322,7 +322,7 @@ pub fn backup_extra(dest: &str, ck: u32) -> anyhow::Result<()> {
 
 // ── DO BACKUP (main function) ──────────────────────────────
 // This is the main backup routine. It:
-//   1. Checks the backup drive is plugged in
+//   1. Checks the backup drive is available
 //   2. Creates the destination folder
 //   3. Saves package lists and estimates size (in parallel)
 //   4. Backs up configs, browsers, VMs, home, extra dirs
@@ -331,13 +331,26 @@ pub fn backup_extra(dest: &str, ck: u32) -> anyhow::Result<()> {
 pub fn do_backup(dest: &str, auto_yes: bool) -> anyhow::Result<()> {
     let dest = std::path::Path::new(dest);
     let dest_str = dest.to_string_lossy().to_string();
-    let base_mount = dest.parent().and_then(|p| p.parent()).map(|p| p.to_string_lossy().to_string())
-        .unwrap_or_default();
+    let platform = detect_platform();
 
-    if !run_ok(&format!("findmnt -n '{}'", base_mount)) {
-        e(&format!("{}Error: backup drive not mounted at {}{}", R, base_mount, N));
-        e(&format!("{}Mount the drive and try again.{}", Y, N));
-        return Err(anyhow::anyhow!("Backup drive not mounted"));
+    // Check the backup drive is available
+    if platform == "linux" {
+        let base_mount = dest.parent().and_then(|p| p.parent()).map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_default();
+        if !run_ok(&format!("findmnt -n '{}'", base_mount)) {
+            e(&format!("{}Error: backup drive not mounted at {}{}", R, base_mount, N));
+            e(&format!("{}Mount the drive and try again.{}", Y, N));
+            return Err(anyhow::anyhow!("Backup drive not mounted"));
+        }
+    } else {
+        // Windows: just verify the parent drive exists
+        if let Some(parent) = dest.parent() {
+            let parent_str = parent.to_string_lossy();
+            if !Path::new(&parent_str.to_string()).exists() {
+                e(&format!("{}Error: backup path not found: {}{}", R, parent_str, N));
+                return Err(anyhow::anyhow!("Backup path not found"));
+            }
+        }
     }
     let _ = std::fs::create_dir_all(dest);
 
