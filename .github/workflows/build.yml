@@ -1,8 +1,11 @@
 name: build
 on:
   push:
-    branches: [feat/cross-platform, main]
+    branches: [main]
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build-windows:
@@ -13,22 +16,14 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
-          target: x86_64-pc-windows-msvc
       - name: Build
         run: cd backup-rs && cargo build --release
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: backup-x64
-          path: backup-rs/target/release/backup.exe
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest
           name: Latest Build
           files: backup-rs/target/release/backup.exe
-          overwrite: true
+          overwrite_files: true
           draft: false
           prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
