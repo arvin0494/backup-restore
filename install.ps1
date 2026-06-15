@@ -104,8 +104,18 @@ function Ensure-Rust {
 
     Show-Step "Installing rustup..."
     try {
-        $installOut = & $rustupPath --yes --no-modify-path 2>&1
+        $env:RUSTUP_INIT_NON_INTERACTIVE = "1"
+        $env:RUSTUP_INIT_NO_MODIFY_PATH = "1"
+        $installOut = & $rustupPath 2>&1
+        $rc = $LASTEXITCODE
+        Remove-Item Env:\RUSTUP_INIT_NON_INTERACTIVE -ErrorAction SilentlyContinue
+        Remove-Item Env:\RUSTUP_INIT_NO_MODIFY_PATH -ErrorAction SilentlyContinue
         Write-Host $installOut
+        if ($rc -ne 0) {
+            Show-Warn "rustup-init returned error code $rc"
+            Write-Host "  Try running manually: $rustupPath"
+            Show-Fail "Rust installation aborted."
+        }
     } catch {
         Show-Fail "Install failed: $_"
     }
