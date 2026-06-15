@@ -46,7 +46,7 @@ function Show-Ok     { Write-Host "  [OK] $args" -ForegroundColor Green }
 function Show-Warn   { Write-Host "  [!] $args" -ForegroundColor Yellow }
 function Show-Info   { Write-Host "  [*] $args" -ForegroundColor DarkGray }
 function Show-Success { Write-Host ""; Write-Host "  SUCCESS: $args" -ForegroundColor Green; Write-Host "" }
-function Show-Fail   { Write-Host ""; Write-Host "  FAIL: $args"; exit 1 }
+  function Show-Fail   { Write-Host ""; Write-Host "  FAIL: $args" -ForegroundColor Red; Write-Host ""; Write-Host "  Press Enter to exit." -ForegroundColor Yellow; Read-Host; exit 1 }
 
 function Test-Command {
     param($name)
