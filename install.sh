@@ -60,7 +60,7 @@ ensure_rust() {
     printf "  ${B}  2${N}) system package manager (pacman / apt / dnf / zypper / apk)\n"
     printf "  ${B}  3${N}) skip — I'll install it myself\n"
     printf "\n  ${B}  Choose [1]:${N} "
-    read -r ans
+    read -r ans < /dev/tty
     case "${ans:-1}" in
         1|"")
             step "Installing rustup…"
@@ -85,7 +85,7 @@ ensure_rust() {
                 exit 1
             fi
             step "Installing via package manager…"
-            $pkg_cmd >/dev/null 2>&1 || true
+            $pkg_cmd
             if ! command -v rustc &>/dev/null; then
                 fail "Rust not found after install."
                 exit 1
