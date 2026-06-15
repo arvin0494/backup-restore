@@ -123,16 +123,18 @@ function Ensure-Fzf {
 
     $fzfDir = "$env:TEMP\fzf-install"
     Expand-Archive -Path $FZF_ZIP -DestinationPath $fzfDir -Force
-    $fzfExe = "$fzfDir\fzf-0.73.1-windows_amd64\fzf.exe"
 
-    if (Test-Path $fzfExe) {
+    # Find fzf.exe anywhere in extracted content
+    $fzfExeFile = Get-ChildItem -Path $fzfDir -Filter "fzf.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+
+    if ($null -ne $fzfExeFile -and (Test-Path $fzfExeFile.FullName)) {
         New-Item -ItemType Directory -Force -Path $BIN_DIR | Out-Null
-        Copy-Item $fzfExe (Join-Path $BIN_DIR "fzf.exe")
+        Copy-Item $fzfExeFile.FullName (Join-Path $BIN_DIR "fzf.exe")
         $env:PATH = "$BIN_DIR;$env:PATH"
         [System.Environment]::SetEnvironmentVariable("PATH", $env:PATH, "User")
         Show-Ok "fzf installed to $BIN_DIR"
     } else {
-        Show-Fail "Could not extract fzf.exe."
+        Show-Fail "Could not find fzf.exe in extracted archive."
     }
 }
 
@@ -154,16 +156,18 @@ function Ensure-Rclone {
 
     $rcloneDir = "$env:TEMP\rclone-install"
     Expand-Archive -Path $RCLONE_ZIP -DestinationPath $rcloneDir -Force
-    $rcloneExe = "$rcloneDir\rclone-v1.71.0-windows-amd64\rclone.exe"
 
-    if (Test-Path $rcloneExe) {
+    # Find rclone.exe anywhere in extracted content
+    $rcloneExeFile = Get-ChildItem -Path $rcloneDir -Filter "rclone.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+
+    if ($null -ne $rcloneExeFile -and (Test-Path $rcloneExeFile.FullName)) {
         New-Item -ItemType Directory -Force -Path $BIN_DIR | Out-Null
-        Copy-Item $rcloneExe (Join-Path $BIN_DIR "rclone.exe")
+        Copy-Item $rcloneExeFile.FullName (Join-Path $BIN_DIR "rclone.exe")
         $env:PATH = "$BIN_DIR;$env:PATH"
         [System.Environment]::SetEnvironmentVariable("PATH", $env:PATH, "User")
         Show-Ok "rclone installed to $BIN_DIR"
     } else {
-        Show-Fail "Could not extract rclone.exe."
+        Show-Fail "Could not find rclone.exe in extracted archive."
     }
 }
 
