@@ -240,11 +240,31 @@ pub fn detect_checkers(path: &str) -> u32 {
     }
 }
 
+// ── DETECT PLATFORM ────────────────────────────────────────
+// Checks if we're running on Linux or Windows (WSL/MSYS).
+// Returns "linux" or "windows".
+pub fn detect_platform() -> &'static str {
+    if std::env::var("APPDATA").is_ok() {
+        "windows"
+    } else {
+        "linux"
+    }
+}
+
 // ── INSTALL DEPENDENCIES ───────────────────────────────────
 // Checks whether rclone, gdu, and fzf are installed. If not,
 // installs them using the system's package manager (pacman,
 // apt-get, dnf, zypper, or apk). Runs automatically at startup.
 pub fn install_deps() -> bool {
+    if detect_platform() == "windows" {
+        if run_ok("where rclone") {
+            return true;
+        }
+        e(&format!("{}rclone not found.{}", R, N));
+        e("  Install: choco install rclone, scoop install rclone, or winget install rclone");
+        return false;
+    }
+
     let (pm, pkgs): (&str, Vec<&str>) = if run_ok("which pacman") {
         ("sudo pacman -S --noconfirm", vec!["rclone", "gdu", "fzf"])
     } else if run_ok("which apt-get") {

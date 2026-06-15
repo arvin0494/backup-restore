@@ -7,8 +7,9 @@
 // - copies everything back to where it belongs
 // ─────────────────────────────────────────────────────────────
 
-use crate::config::BROWSERS;
+use crate::config::browsers;
 use crate::util::*;
+use std::env;
 use std::io::Write;
 use std::path::Path;
 
@@ -35,83 +36,109 @@ pub fn do_restore(backup_dir: &str, dest_dir: &str, auto: bool) -> anyhow::Resul
 
     let bd = backup_dir.to_string_lossy().to_string();
     let dd = dest_dir.to_string_lossy().to_string();
+    let platform = detect_platform();
     let mut items: Vec<Item> = Vec::new();
 
     // ── PACKAGE LISTS ──────────────────────────────────────
     // If the backup has a list of installed programs, offer to
-    // reinstall them. The code checks which Linux system you're
-    // on (Arch, Debian, Fedora, etc.) and uses the right tool.
-
-    // Arch Linux official packages
-    let pac_off = format!("{}/packages-pacman-official.txt", bd);
-    let pac_off_old = format!("{}/pacman-official.txt", bd);
-    if (Path::new(&pac_off).exists() || Path::new(&pac_off_old).exists()) && run_ok("which pacman") {
-        let d = bd.clone();
-        items.push(("official-pkgs".into(), "Install official packages (pacman)".into(), Some(Box::new(move || {
-            let f = if Path::new(&format!("{}/packages-pacman-official.txt", d)).exists() { "packages-pacman-official.txt" } else { "pacman-official.txt" };
-            let _ = run(&format!("sudo pacman -S --needed - < '{}/{}'", d, f));
-        }))));
-    }
-    // Arch AUR packages (via yay)
-    let pac_aur = format!("{}/packages-aur.txt", bd);
-    let pac_aur_old = format!("{}/pacman-aur.txt", bd);
-    if (Path::new(&pac_aur).exists() || Path::new(&pac_aur_old).exists()) && run_ok("which yay") {
-        let d = bd.clone();
-        items.push(("aur-pkgs".into(), "Install AUR packages (yay)".into(), Some(Box::new(move || {
-            let f = if Path::new(&format!("{}/packages-aur.txt", d)).exists() { "packages-aur.txt" } else { "pacman-aur.txt" };
-            let _ = run(&format!("yay -S --needed - < '{}/{}'", d, f));
-        }))));
-    }
-    // Debian / Ubuntu packages
-    if Path::new(&format!("{}/packages-dpkg.txt", bd)).exists() && run_ok("which dpkg") {
-        let d = bd.clone();
-        items.push(("dpkg-pkgs".into(), "Install packages (dpkg/apt)".into(), Some(Box::new(move || {
-            let _ = run(&format!("sudo apt-get update && sudo apt-get install -y $(awk '{{print $1}}' '{}/packages-dpkg.txt')", d));
-        }))));
-    }
-    // Fedora packages
-    if Path::new(&format!("{}/packages-dnf.txt", bd)).exists() && run_ok("which dnf") {
-        let d = bd.clone();
-        items.push(("dnf-pkgs".into(), "Install packages (dnf)".into(), Some(Box::new(move || {
-            let _ = run(&format!("sudo dnf install -y $(cat '{}/packages-dnf.txt')", d));
-        }))));
-    }
-    // openSUSE packages
-    if Path::new(&format!("{}/packages-zypper.txt", bd)).exists() && run_ok("which zypper") {
-        let d = bd.clone();
-        items.push(("zypper-pkgs".into(), "Install packages (zypper)".into(), Some(Box::new(move || {
-            let _ = run(&format!("sudo zypper install -y $(cat '{}/packages-zypper.txt')", d));
-        }))));
-    }
-    // Alpine Linux packages
-    if Path::new(&format!("{}/packages-apk.txt", bd)).exists() && run_ok("which apk") {
-        let d = bd.clone();
-        items.push(("apk-pkgs".into(), "Install packages (apk)".into(), Some(Box::new(move || {
-            let _ = run(&format!("sudo apk add $(cat '{}/packages-apk.txt')", d));
-        }))));
-    }
-    // Flatpak apps
-    if Path::new(&format!("{}/flatpak-list.txt", bd)).exists() && run_ok("which flatpak") {
-        let d = bd.clone();
-        items.push(("flatpaks".into(), "Install Flatpaks".into(), Some(Box::new(move || { let _ = run(&format!("xargs flatpak install -y < '{}/flatpak-list.txt'", d)); }))));
+    // reinstall them. Linux package managers only.
+    if platform == "linux" {
+        // Arch Linux official packages
+        let pac_off = format!("{}/packages-pacman-official.txt", bd);
+        let pac_off_old = format!("{}/pacman-official.txt", bd);
+        if (Path::new(&pac_off).exists() || Path::new(&pac_off_old).exists()) && run_ok("which pacman") {
+            let d = bd.clone();
+            items.push(("official-pkgs".into(), "Install official packages (pacman)".into(), Some(Box::new(move || {
+                let f = if Path::new(&format!("{}/packages-pacman-official.txt", d)).exists() { "packages-pacman-official.txt" } else { "pacman-official.txt" };
+                let _ = run(&format!("sudo pacman -S --needed - < '{}/{}'", d, f));
+            }))));
+        }
+        // Arch AUR packages (via yay)
+        let pac_aur = format!("{}/packages-aur.txt", bd);
+        let pac_aur_old = format!("{}/pacman-aur.txt", bd);
+        if (Path::new(&pac_aur).exists() || Path::new(&pac_aur_old).exists()) && run_ok("which yay") {
+            let d = bd.clone();
+            items.push(("aur-pkgs".into(), "Install AUR packages (yay)".into(), Some(Box::new(move || {
+                let f = if Path::new(&format!("{}/packages-aur.txt", d)).exists() { "packages-aur.txt" } else { "pacman-aur.txt" };
+                let _ = run(&format!("yay -S --needed - < '{}/{}'", d, f));
+            }))));
+        }
+        // Debian / Ubuntu packages
+        if Path::new(&format!("{}/packages-dpkg.txt", bd)).exists() && run_ok("which dpkg") {
+            let d = bd.clone();
+            items.push(("dpkg-pkgs".into(), "Install packages (dpkg/apt)".into(), Some(Box::new(move || {
+                let _ = run(&format!("sudo apt-get update && sudo apt-get install -y $(awk '{{print $1}}' '{}/packages-dpkg.txt')", d));
+            }))));
+        }
+        // Fedora packages
+        if Path::new(&format!("{}/packages-dnf.txt", bd)).exists() && run_ok("which dnf") {
+            let d = bd.clone();
+            items.push(("dnf-pkgs".into(), "Install packages (dnf)".into(), Some(Box::new(move || {
+                let _ = run(&format!("sudo dnf install -y $(cat '{}/packages-dnf.txt')", d));
+            }))));
+        }
+        // openSUSE packages
+        if Path::new(&format!("{}/packages-zypper.txt", bd)).exists() && run_ok("which zypper") {
+            let d = bd.clone();
+            items.push(("zypper-pkgs".into(), "Install packages (zypper)".into(), Some(Box::new(move || {
+                let _ = run(&format!("sudo zypper install -y $(cat '{}/packages-zypper.txt')", d));
+            }))));
+        }
+        // Alpine Linux packages
+        if Path::new(&format!("{}/packages-apk.txt", bd)).exists() && run_ok("which apk") {
+            let d = bd.clone();
+            items.push(("apk-pkgs".into(), "Install packages (apk)".into(), Some(Box::new(move || {
+                let _ = run(&format!("sudo apk add $(cat '{}/packages-apk.txt')", d));
+            }))));
+        }
+        // Flatpak apps
+        if Path::new(&format!("{}/flatpak-list.txt", bd)).exists() && run_ok("which flatpak") {
+            let d = bd.clone();
+            items.push(("flatpaks".into(), "Install Flatpaks".into(), Some(Box::new(move || { let _ = run(&format!("xargs flatpak install -y < '{}/flatpak-list.txt'", d)); }))));
+        }
+    } else if platform == "windows" {
+        // Windows: note that package lists from Linux backups are not directly usable
+        // Users can still install Chocolatey/Scoop packages manually
     }
 
     // ── CONFIG FILES ───────────────────────────────────────
     // Restore ~/.config (your desktop environment settings,
     // terminal configs, and other program settings).
-    if Path::new(&format!("{}/config", bd)).is_dir() {
+    // Linux only — Windows doesn't use ~/.config
+    if platform == "linux" && Path::new(&format!("{}/config", bd)).is_dir() {
         let (a, b) = (bd.clone(), dd.clone());
         items.push(("config".into(), "Restore ~/.config".into(), Some(Box::new(move || { let _ = copy_progress(&format!("{}/config/", a), &format!("{}/.config/", b), ck, false, &[]); }))));
+    }
+    // Windows: restore git config if available
+    if platform == "windows" && Path::new(&format!("{}/gitconfig", bd)).exists() {
+        let userprofile = env::var("USERPROFILE").unwrap_or_else(|_| "C:\\Users\\Default".to_string());
+        let (a, b) = (bd.clone(), userprofile.clone());
+        items.push(("gitconfig".into(), "Restore gitconfig".into(), Some(Box::new(move || { let _ = copy_progress(&format!("{}/gitconfig", a), &format!("{}/gitconfig", b), ck, false, &[]); }))));
     }
 
     // ── BROWSER PROFILES ───────────────────────────────────
     // Restore Firefox, Chromium, Chrome, and Brave profiles.
-    for (src_rel, name) in BROWSERS {
+    for (src_rel, name) in browsers() {
         let p = format!("{}/browser/{}", bd, name);
         if Path::new(&p).is_dir() {
-            let (src, dst) = (p.clone(), dd.clone());
-            let rd = src_rel.to_string();
-            items.push((format!("browser-{}", name), format!("Restore {}", name), Some(Box::new(move || { let _ = copy_progress(&format!("{}/", src), &format!("{}/{}/", dst, rd), ck, false, &[]); }))));
+            if platform == "linux" {
+                let (src, dst) = (p.clone(), dd.clone());
+                let rd = src_rel.to_string();
+                items.push((format!("browser-{}", name), format!("Restore {}", name), Some(Box::new(move || { let _ = copy_progress(&format!("{}/", src), &format!("{}/{}/", dst, rd), ck, false, &[]); }))));
+            } else {
+                // Windows: map browser to AppData/LocappData path
+                let appdata = env::var("APPDATA").unwrap_or_else(|_| "C:\\Users\\Default\\AppData\\Roaming".to_string());
+                let localappdata = env::var("LOCALAPPDATA").unwrap_or_else(|_| "C:\\Users\\Default\\AppData\\Local".to_string());
+                let (dest, label) = match *name {
+                    "mozilla" => (format!("{}\\Mozilla\\Firefox\\Profiles\\", appdata), format!("Restore Mozilla Firefox ({}\\Mozilla\\Firefox\\Profiles\\)", appdata)),
+                    "chromium" => (format!("{}\\Chromium\\User Data\\", localappdata), format!("Restore Chromium ({}\\Chromium\\User Data\\)", localappdata)),
+                    "google-chrome" => (format!("{}\\Google\\Chrome\\User Data\\", localappdata), format!("Restore Google Chrome ({}\\Google\\Chrome\\User Data\\)", localappdata)),
+                    "BraveSoftware" => (format!("{}\\BraveSoftware\\Brave-Browser\\User Data\\", localappdata), format!("Restore Brave ({}\\BraveSoftware\\Brave-Browser\\User Data\\)", localappdata)),
+                    _ => continue,
+                };
+                let (src, dst) = (p.clone(), dest);
+                items.push((format!("browser-{}", name), label, Some(Box::new(move || { let _ = copy_progress(&format!("{}/", src), &dst, ck, false, &[]); }))));
+            }
         }
     }
 
@@ -121,32 +148,43 @@ pub fn do_restore(backup_dir: &str, dest_dir: &str, auto: bool) -> anyhow::Resul
     for name in &[".ssh", ".gnupg"] {
         let p = format!("{}/{}", bd, name);
         if Path::new(&p).is_dir() {
-            let (src, dst) = (p.clone(), dd.clone());
-            let n = name.to_string();
-            items.push((name.trim_start_matches('.').to_string(), format!("Restore ~/{}", name), Some(Box::new(move || { let _ = copy_progress(&format!("{}/", src), &format!("{}/{}/", dst, n), ck, false, &[]); }))));
+            if platform == "linux" {
+                let (src, dst) = (p.clone(), dd.clone());
+                let n = name.to_string();
+                items.push((name.trim_start_matches('.').to_string(), format!("Restore ~/{}", name), Some(Box::new(move || { let _ = copy_progress(&format!("{}/", src), &format!("{}/{}/", dst, n), ck, false, &[]); }))));
+            } else {
+                let userprofile = env::var("USERPROFILE").unwrap_or_else(|_| "C:\\Users\\Default".to_string());
+                let (src, dst) = (p.clone(), userprofile.clone());
+                let n = name.trim_start_matches('.').to_string();
+                items.push((format!("{}", name.trim_start_matches('.')), format!("Restore {}/{}", name, n), Some(Box::new(move || { let _ = copy_progress(&format!("{}/", src), &format!("{}/{}", dst, name), ck, false, &[]); }))));
+            }
         }
     }
 
-    // ── KEYRINGS ───────────────────────────────────────────
-    // Restore your password keyrings (stored passwords).
-    let keyrings = format!("{}/keyrings", bd);
-    if Path::new(&keyrings).is_dir() {
-        let (src, dst) = (keyrings.clone(), dd.clone());
-        items.push(("keyrings".into(), "Restore keyrings (~/.local/share/keyrings)".into(), Some(Box::new(move || { let _ = copy_progress(&format!("{}/", src), &format!("{}/.local/share/keyrings/", dst), ck, false, &[]); }))));
+   // ── KEYRINGS ───────────────────────────────────────────
+    // Restore your password keyrings (stored passwords). Linux only.
+    if platform == "linux" {
+        let keyrings = format!("{}/keyrings", bd);
+        if Path::new(&keyrings).is_dir() {
+            let (src, dst) = (keyrings.clone(), dd.clone());
+            items.push(("keyrings".into(), "Restore keyrings (~/.local/share/keyrings)".into(), Some(Box::new(move || { let _ = copy_progress(&format!("{}/", src), &format!("{}/.local/share/keyrings/", dst), ck, false, &[]); }))));
+        }
     }
 
     // ── VIRTUAL MACHINE CONFIGS ────────────────────────────
-    // Restore libvirt VM settings (virtual machine definitions).
-    let vm_qemu = format!("{}/virt-manager/qemu", bd);
-    if Path::new(&vm_qemu).is_dir() {
-        let d = bd.clone();
-        items.push(("vm-configs".into(), "Restore libvirt VM configs (/etc/libvirt/qemu)".into(), Some(Box::new(move || { let _ = copy_progress(&format!("{}/virt-manager/qemu/", d), "/etc/libvirt/qemu/", ck, true, &[]); }))));
-    }
-    // VM disk images
-    let vm_images = format!("{}/virt-manager/images", bd);
-    if Path::new(&vm_images).is_dir() {
-        let src = vm_images.clone();
-        items.push(("vm-images".into(), "Restore VM disk images (/var/lib/libvirt/images)".into(), Some(Box::new(move || { let _ = copy_progress(&format!("{}/", src), "/var/lib/libvirt/images/", ck, true, &[]); }))));
+    // Restore libvirt VM settings (virtual machine definitions). Linux only.
+    if platform == "linux" {
+        let vm_qemu = format!("{}/virt-manager/qemu", bd);
+        if Path::new(&vm_qemu).is_dir() {
+            let d = bd.clone();
+            items.push(("vm-configs".into(), "Restore libvirt VM configs (/etc/libvirt/qemu)".into(), Some(Box::new(move || { let _ = copy_progress(&format!("{}/virt-manager/qemu/", d), "/etc/libvirt/qemu/", ck, true, &[]); }))));
+        }
+        // VM disk images
+        let vm_images = format!("{}/virt-manager/images", bd);
+        if Path::new(&vm_images).is_dir() {
+            let src = vm_images.clone();
+            items.push(("vm-images".into(), "Restore VM disk images (/var/lib/libvirt/images)".into(), Some(Box::new(move || { let _ = copy_progress(&format!("{}/", src), "/var/lib/libvirt/images/", ck, true, &[]); }))));
+        }
     }
 
     // ── HOME SUBDIRECTORIES ────────────────────────────────

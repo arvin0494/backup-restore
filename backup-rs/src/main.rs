@@ -23,8 +23,14 @@ pub static HOME: OnceLock<String> = OnceLock::new();
 // ── MAIN ───────────────────────────────────────────────────
 // This runs automatically when you type "bckup" in the terminal.
 fn main() -> anyhow::Result<()> {
-    // Remember the home folder (e.g., /home/yourname)
-    HOME.get_or_init(|| std::env::var("HOME").unwrap_or_else(|_| "/root".into()));
+    // Remember the home folder (e.g., /home/yourname or C:\Users\yourname)
+    HOME.get_or_init(|| std::env::var("HOME").unwrap_or_else(|_| {
+        if cfg!(windows) {
+            std::env::var("USERPROFILE").unwrap_or_else(|_| "C:\\Users\\Default".into())
+        } else {
+            "/root".into()
+        }
+    }));
 
     use clap::Parser;
 

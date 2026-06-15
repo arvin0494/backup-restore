@@ -89,13 +89,31 @@ fn get_config_path() -> PathBuf {
 }
 
 // ── BROWSER PROFILES ───────────────────────────────────────
-// Which browsers to back up. Each entry is (folder, display name).
-pub const BROWSERS: &[(&str, &str)] = &[
+// Linux: stores browser data in ~/.config/ or ~/.mozilla
+pub const BROWSERS_LINUX: &[(&str, &str)] = &[
     (".mozilla", "mozilla"),
     (".config/chromium", "chromium"),
     (".config/google-chrome", "google-chrome"),
     (".config/BraveSoftware", "BraveSoftware"),
 ];
+
+// Windows: stores browser data in %APPDATA% or %LOCALAPPDATA%
+pub const BROWSERS_WINDOWS: &[(&str, &str)] = &[
+    ("AppData\\Roaming\\Mozilla", "mozilla"),
+    ("AppData\\Local\\Chromium\\User Data", "chromium"),
+    ("AppData\\Local\\Google\\Chrome\\User Data", "google-chrome"),
+    ("AppData\\Local\\BraveSoftware\\Brave-Browser\\User Data", "BraveSoftware"),
+];
+
+// Get browser list for current platform
+pub fn browsers() -> &'static [(&'static str, &'static str)] {
+    if crate::util::detect_platform() == "windows" {
+        BROWSERS_WINDOWS
+    } else {
+        BROWSERS_LINUX
+    }
+}
+
 
 // ── CACHE EXCLUDES ─────────────────────────────────────────
 // Names of cache folders to skip when copying (they're just

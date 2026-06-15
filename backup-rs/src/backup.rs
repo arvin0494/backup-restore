@@ -10,6 +10,7 @@
 use crate::config;
 use crate::config::*;
 use crate::util::*;
+use std::env;
 use std::io::Write;
 use std::path::Path;
 use std::process::Command;
@@ -125,24 +126,45 @@ pub fn estimate_home_size() -> u64 {
 // ── BACKUP CONFIGS ─────────────────────────────────────────
 // Copies your settings (~/.config, ~/.ssh, ~/.gnupg, keyrings)
 // to the backup folder. Skips caches and trash to save space.
+// On Windows, backs up SSH keys and GPG keys to the user profile.
 pub fn backup_config(dest: &str, ck: u32) -> anyhow::Result<()> {
     e("Backing up configs");
     let cfg_dest = format!("{}/config", dest);
     
-    let mut extra_args: Vec<&str> = Vec::new();
-    for &x in CACHE_EXCLUDES.iter().chain(CONFIG_EXCLUDES.iter()) {
-        extra_args.push("--exclude");
-        extra_args.push(x);
-    }
-    let home = crate::HOME.get().unwrap();
-    e(&format!("  {}.config{} → ...", W, N));
-    copy_progress(&format!("{}/.config/", home), &cfg_dest, ck, false, &extra_args)?;
+    let platform = detect_platform();
     
-    for item in &[".ssh", ".gnupg", ".local/share/keyrings"] {
-        let src = format!("{}/{}", home, item);
-        if Path::new(&src).is_dir() {
-            e(&format!("  {}{}{} → ...", W, item, N));
-            copy_progress(&src, &format!("{}/{}", dest, item), ck, false, &[])?;
+    if platform == "linux" {
+        let mut extra_args: Vec<&str> = Vec::new();
+        for &x in CACHE_EXCLUDES.iter().chain(CONFIG_EXCLUDES.iter()) {
+            extra_args.push("--exclude");
+            extra_args.push(x);
+        }
+        let home = crate::HOME.get().unwrap();
+        e(&format!("  {}.config{} → ...", W, N));
+        copy_progress(&format!("{}/.config/", home), &cfg_dest, ck, false, &extra_args)?;
+        
+        for item in &[".ssh", ".gnupg", ".local/share/keyrings"] {
+            let src = format!("{}/{}", home, item);
+            if Path::new(&src).is_dir() {
+                e(&format!("  {}{}{} → ...", W, item, N));
+                copy_progress(&src, &format!("{}/{}", dest, item), ck, false, &[])?;
+            }
+        }
+    } else {
+        // Windows: SSH keys and GPG
+        let userprofile = env::var("USERPROFILE").unwrap_or_else(|_| "C:\\Users\\Default".to_string());
+        for item in &[".ssh", ".gnupg"] {
+            let src = format!("{}{}", userprofile, item);
+            if Path::new(&src).is_dir() || Path::new(&format!("{}.gitconfig", src)).exists() {
+                e(&format!("  {}{}{} → ...", W, item, N));
+                copy_progress(&src, &format!("{}/{}", dest, item), ck, false, &[])?;
+            }
+        }
+        // Git config (Windows git for windows uses it)
+        let gitconfig = format!("{}\\gitconfig", userprofile);
+        if Path::new(&gitconfig).exists() {
+            e(&format!("  {}gitconfig{} → ...", W, N));
+            copy_progress(&gitconfig, &format!("{}/gitconfig", dest), ck, false, &[])?;
         }
     }
     Ok(())
@@ -152,6 +174,7 @@ pub fn backup_config(dest: &str, ck: u32) -> anyhow::Result<()> {
 // Copies Firefox, Chromium, Chrome, and Brave profiles.
 // Only backs up profiles that changed since the last backup
 // (saves time by skipping unchanged ones).
+// On Windows, backs up from %APPDATA% and %LOCALAPPDATA%.
 pub fn backup_browsers(dest: &str, ck: u32) -> anyhow::Result<()> {
     e("Backing up browser data");
     let b_dest = format!("{}/browser", dest);
@@ -161,30 +184,55 @@ pub fn backup_browsers(dest: &str, ck: u32) -> anyhow::Result<()> {
         extra_args.push("--exclude");
         extra_args.push(x);
     }
-    let home = crate::HOME.get().unwrap();
     
+    let platform = detect_platform();
     let manifest_path = config::manifest_path();
     let mut manifest = load_manifest(&manifest_path);
     let mut changed = 0u32;
     let mut skipped = 0u32;
     
-    for (src_rel, name) in BROWSERS {
-        let src = format!("{}/{}", home, src_rel);
-        if !Path::new(&src).is_dir() { continue; }
-        let mtime = dir_mtime(&src).unwrap_or(0);
-        if manifest.get(*name) == Some(&mtime) {
-            e(&format!("  {}{}{} unchanged", C, name, N));
-            skipped += 1;
-            continue;
+    if platform == "linux" {
+        let home = crate::HOME.get().unwrap();
+        
+        for (src_rel, name) in BROWSERS_LINUX {
+            let src = format!("{}/{}", home, src_rel);
+            if !Path::new(&src).is_dir() { continue; }
+            let mtime = dir_mtime(&src).unwrap_or(0);
+            if manifest.get(*name) == Some(&mtime) {
+                e(&format!("  {}{}{} unchanged", C, name, N));
+                skipped += 1;
+                continue;
+            }
+            e(&format!("  {}{}{} → ...", W, name, N));
+            copy_progress(
+                &format!("{}/", src),
+                &format!("{}/{}/", b_dest, name),
+                ck, false, &extra_args,
+            )?;
+            manifest.insert(name.to_string(), mtime);
+            changed += 1;
         }
-        e(&format!("  {}{}{} → ...", W, name, N));
-        copy_progress(
-            &format!("{}/", src),
-            &format!("{}/{}/", b_dest, name),
-            ck, false, &extra_args,
-        )?;
-        manifest.insert(name.to_string(), mtime);
-        changed += 1;
+    } else {
+        let userprofile = env::var("USERPROFILE").unwrap_or_else(|_| "C:\\Users\\Default".to_string());
+        
+        for (src_rel, name) in BROWSERS_WINDOWS {
+            let src = format!("{}\\{}", userprofile, src_rel);
+            if !Path::new(&src).is_dir() { continue; }
+            let mtime = dir_mtime(&src).unwrap_or(0);
+            if manifest.get(*name) == Some(&mtime) {
+                e(&format!("  {}{}{} unchanged", C, name, N));
+                skipped += 1;
+                continue;
+            }
+            e(&format!("  {}{}{} → ...", W, name, N));
+            copy_progress(
+                &format!("{}/", src),
+                &format!("{}/{}/", b_dest, name),
+                ck, false, &extra_args,
+            )?;
+            manifest.insert(name.to_string(), mtime);
+            changed += 1;
+        }
     }
     save_manifest(&manifest_path, &manifest)?;
     if changed > 0 || skipped > 0 {
@@ -195,8 +243,9 @@ pub fn backup_browsers(dest: &str, ck: u32) -> anyhow::Result<()> {
 
 // ── BACKUP VIRTUAL MACHINES ────────────────────────────────
 // Saves libvirt VM configuration files and disk images
-// (if you use virt-manager / KVM / QEMU).
+// (if you use virt-manager / KVM / QEMU). Linux only.
 pub fn backup_vm(dest: &str, ck: u32) -> anyhow::Result<()> {
+    if detect_platform() != "linux" { return Ok(()); }
     e("Backing up VM data");
     let vm_dest = format!("{}/virt-manager", dest);
     let _ = std::fs::create_dir_all(&vm_dest);
