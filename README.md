@@ -22,6 +22,8 @@ Backup your Linux system before reinstalling, then restore everything after.
 
 ## Get the tool
 
+### Linux
+
 Quick one-liner:
 
 ```bash
@@ -37,6 +39,26 @@ bash install.sh
 ```
 
 The installer checks for Rust, offers to install it (rustup or system package manager), builds the binary, and adds the `bckup` alias to your shell.
+
+### Windows
+
+Quick one-liner (PowerShell):
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -Command "iwr -useb https://raw.githubusercontent.com/arvin0494/backup-restore/main/install.ps1 | iex"
+```
+
+This downloads `rclone` and `fzf`, installs Rust via `rustup`, builds the binary, and adds the `bckup` alias to your PowerShell profile.
+
+If you prefer cloning first:
+
+```powershell
+git clone git@github.com:arvin0494/backup-restore.git
+cd backup-restore
+.\install.ps1
+```
+
+Requires administrator access (for PATH modification). Chocolatey is auto-installed if not present.
 
 ## Dependencies
 
