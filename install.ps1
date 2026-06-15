@@ -123,7 +123,7 @@ function Ensure-Fzf {
 
     $fzfDir = "$env:TEMP\fzf-install"
     Expand-Archive -Path $FZF_ZIP -DestinationPath $fzfDir -Force
-    $fzfExe = Join-Path $fzfDir "fzf-0.73.1-windows_amd64" "fzf.exe"
+    $fzfExe = "$fzfDir\fzf-0.73.1-windows_amd64\fzf.exe"
 
     if (Test-Path $fzfExe) {
         New-Item -ItemType Directory -Force -Path $BIN_DIR | Out-Null
@@ -154,7 +154,7 @@ function Ensure-Rclone {
 
     $rcloneDir = "$env:TEMP\rclone-install"
     Expand-Archive -Path $RCLONE_ZIP -DestinationPath $rcloneDir -Force
-    $rcloneExe = Join-Path $rcloneDir "rclone-v1.71.0-windows-amd64" "rclone.exe"
+    $rcloneExe = "$rcloneDir\rclone-v1.71.0-windows-amd64\rclone.exe"
 
     if (Test-Path $rcloneExe) {
         New-Item -ItemType Directory -Force -Path $BIN_DIR | Out-Null
@@ -185,6 +185,12 @@ function Clone-Repo {
 
 # --- 5. BUILD ---
 function Build-Binary {
+    # Check for MSVC linker
+    if (-not (Test-Path "C:\Program Files\Microsoft Visual Studio\2022\*\VC\Tools\MSVC\*\bin\Hostx64\x64\link.exe")) {
+        if (-not (Test-Path "C:\Program Files (x86)\Microsoft Visual Studio\2019\*\VC\Tools\MSVC\*\bin\Hostx64\x64\link.exe")) {
+            Show-Fail "MSVC linker (link.exe) not found. Install 'Visual Studio Build Tools 2022' with 'C++ build tools' workload, or 'Visual Studio 2022 Build Tools' with 'Desktop development with C++' workload."
+        }
+    }
     Show-Step "Compiling..."
     $cargoDir = "$DEST\backup-rs"
     $result = cargo build --release --manifest-path (Join-Path $cargoDir "Cargo.toml") 2>&1
