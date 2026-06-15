@@ -268,7 +268,37 @@ pub fn install_deps() -> bool {
             return true;
         }
         e(&format!("{}rclone not found.{}", R, N));
-        e("  Install: choco install rclone, scoop install rclone, or winget install rclone");
+        let mut tried = false;
+        // Winget (built into Win10 1809+, Win11)
+        if run_ok("where winget") {
+            tried = true;
+            e(&format!("{}Installing rclone via winget...{}", Y, N));
+            let _ = run("winget install --id Rclone.Rclone --silent --accept-package-agreements --accept-source-agreements");
+            if run_ok("where rclone") {
+                e(&format!("{}{}Installed via winget{}", G, W, N));
+                return true;
+            }
+        }
+        // Chocolatey
+        if run_ok("where choco") {
+            tried = true;
+            e(&format!("{}Installing rclone via choco...{}", Y, N));
+            let _ = run("choco install rclone -y");
+            if run_ok("where rclone") {
+                e(&format!("{}{}Installed via choco{}", G, W, N));
+                return true;
+            }
+        }
+        if !tried {
+            e("  Winget and choco not found.");
+            e("  Install winget: https://apps.microsoft.com/detail/97980606q267 (Win11) or winget source");
+            e("  Install choco: https://chocolatey.org/install");
+            e("  Or download rclone: https://rclone.org/downloads/");
+        } else {
+            e("  Failed to install. Try manually:");
+            e("    winget install Rclone.Rclone   or   choco install rclone");
+            e("    Or download: https://rclone.org/downloads/");
+        }
         return false;
     }
 
