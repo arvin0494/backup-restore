@@ -2,7 +2,7 @@
 # backup-restore installer for Windows
 # ─────────────────────────────────────────────────────────────
 
-$ErrorActionPreference = "Stop"
+$ErrorActionPreference = "Continue"
 
 $REPO       = "arvin0494/backup-restore"
 $BRANCH     = "feat/cross-platform"
@@ -337,5 +337,6 @@ Success "Install complete!"
 Step "Run $B$bckup -b$N or $B$bckup --help$N"
 Write-Host ""
 
-# Auto-exit so the window closes
-exit
+# Keep window open
+Write-Host "  Press Enter to close..." -ForegroundColor DarkGray
+Read-Host | Out-Null
