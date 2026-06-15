@@ -242,23 +242,28 @@ function Build-Binary {
 function Set-Alias {
     $profilePath = $PROFILE
     $aliasLine = "Set-Alias bckup '$BIN_PATH'"
+    $pathLine = '$env:PATH = "$BIN_DIR;" + $env:PATH'
 
     if (Test-Path $profilePath) {
         $content = Get-Content $profilePath -Raw -ErrorAction SilentlyContinue
-        if ($content -match [regex]::Escape($aliasLine)) {
+        if ($content -match [regex]::Escape($aliasLine) -and $content -match [regex]::Escape($pathLine)) {
             Show-Ok "Alias: already set in $profilePath"
             return
         }
     }
 
     New-Item -ItemType Directory -Force -Path (Split-Path $profilePath) | Out-Null
+    $block = "`n# backup-restore`n$pathLine`n$aliasLine"
     if (Test-Path $profilePath) {
-        Add-Content -Path $profilePath -Value "`n# backup-restore`n$aliasLine"
+        Add-Content -Path $profilePath -Value $block
     } else {
-        Set-Content -Path $profilePath -Value "$aliasLine"
+        Set-Content -Path $profilePath -Value $block
     }
     Show-Ok "Alias: injected into $profilePath"
     Show-Step "Run: bckup"
+
+    # Also add to current session
+    $env:PATH = "$BIN_DIR;$env:PATH"
 }
 
 # --- 7. CONFIG ---
