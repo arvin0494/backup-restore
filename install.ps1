@@ -189,22 +189,45 @@ function Clone-Repo {
 
 # --- 5. BUILD ---
 function Build-Binary {
+    $cargoDir = "$DEST\backup-rs"
+    $binary = Join-Path $cargoDir "target\release\backup.exe"
+
     # Check for MSVC linker
-    if (-not (Test-Path "C:\Program Files\Microsoft Visual Studio\2022\*\VC\Tools\MSVC\*\bin\Hostx64\x64\link.exe")) {
-        if (-not (Test-Path "C:\Program Files (x86)\Microsoft Visual Studio\2019\*\VC\Tools\MSVC\*\bin\Hostx64\x64\link.exe")) {
-            Show-Fail "MSVC linker (link.exe) not found. Install 'Visual Studio Build Tools 2022' with 'C++ build tools' workload, or 'Visual Studio 2022 Build Tools' with 'Desktop development with C++' workload."
+    $msvcFound = Test-Path "C:\Program Files\Microsoft Visual Studio\2022\*\VC\Tools\MSVC\*\bin\Hostx64\x64\link.exe" -ErrorAction SilentlyContinue
+    if (-not $msvcFound) {
+        $msvcFound = Test-Path "C:\Program Files (x86)\Microsoft Visual Studio\2019\*\VC\Tools\MSVC\*\bin\Hostx64\x64\link.exe" -ErrorAction SilentlyContinue
+    }
+
+    if (-not $msvcFound) {
+        Show-Warn "No MSVC linker found. Downloading pre-built binary from GitHub releases..."
+        $releaseUrl = "https://github.com/arvin0494/backup-restore/releases/latest/download/backup.exe"
+        $cachedBin = "$env:TEMP\backup.exe"
+
+        # Try downloading from releases; fallback to build attempt
+        try {
+            Invoke-WebRequest -Uri $releaseUrl -OutFile $cachedBin -UseBasicParsing -ErrorAction Stop
+            Show-Ok "Downloaded pre-built binary"
+            $binary = $cachedBin
+        } catch {
+            Show-Warn "Could not download pre-built binary. Trying local build (requires MSVC Build Tools)..."
+            Show-Step "Compiling..."
+            $result = cargo build --release --manifest-path (Join-Path $cargoDir "Cargo.toml") 2>&1
+            Write-Host $result
+
+            if (-not $?) {
+                Show-Fail "Build failed. Install 'Visual Studio Build Tools 2022' with 'Desktop development with C++' workload."
+            }
+        }
+    } else {
+        Show-Step "Compiling (MSVC)..."
+        $result = cargo build --release --manifest-path (Join-Path $cargoDir "Cargo.toml") 2>&1
+        Write-Host $result
+
+        if (-not $?) {
+            Show-Fail "Build failed."
         }
     }
-    Show-Step "Compiling..."
-    $cargoDir = "$DEST\backup-rs"
-    $result = cargo build --release --manifest-path (Join-Path $cargoDir "Cargo.toml") 2>&1
-    Write-Host $result
 
-    if (-not $?) {
-        Show-Fail "Build failed."
-    }
-
-    $binary = Join-Path $cargoDir "target\release\backup.exe"
     if (-not (Test-Path $binary)) {
         Show-Fail "Build failed - binary not found."
     }
