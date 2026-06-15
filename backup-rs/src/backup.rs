@@ -311,7 +311,7 @@ pub fn do_backup(dest: &str, auto_yes: bool) -> anyhow::Result<()> {
     }
 
     let ck = detect_checkers(&dest_str);
-    let kind = if ck <= 3 { "HDD" } else if ck <= 8 { "SSD" } else { "NVMe" };
+    let kind = if ck <= 1 { "HDD" } else if ck <= 8 { "SSD" } else { "NVMe" };
     e(&format!("Checkers: {} ({})", ck, kind));
 
     let gdu_handle = thread::spawn(|| estimate_home_size());

@@ -26,7 +26,7 @@ project/
 - `run(cmd)` / `run_ok(cmd)` — `sh -c` subprocess
 - `copy_progress()` — rclone wrapper: spawn with `--progress`, inherit stderr, Ctrl+C kills process group
 - `detect_path()` — build path from hostname + os-release
-- `detect_checkers()` — probe rotational/NVMe for parallelism (HDD=3, SSD=8, NVMe=16)
+- `detect_checkers()` — probe rotational/NVMe for parallelism (HDD=1, SSD=8, NVMe=16)
 - `install_deps()` — detect package manager → install rclone, gdu, fzf
 - ANSI color constants shared across modules
 
@@ -58,5 +58,5 @@ project/
 | Cancellation | Process group SIGINT → 10s → SIGKILL |
 | Parallel estimation | `thread::spawn` fire-and-forget during sequential steps |
 | Dual push | `git remote set-url --add --push origin` |
-| Hardware tuning | Rotational flag → HDD(3)/SSD(8)/NVMe(16) |
+| Hardware tuning | Rotational flag → HDD(1)/SSD(8)/NVMe(16) |
 | Error handling | `anyhow::Result` throughout |

@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.2.0 — 2026-06-15
+
+- **HDD backup tuning**: reduced checkers/transfers from 3 to 1 for rotational drives to avoid overwhelming slow disks
+
 ## v1.1.0 — 2026-06-12
 
 - **Android backup via FTP**: rclone copy over FTP instead of adb pull — incremental, skips unchanged files, shows real-time progress

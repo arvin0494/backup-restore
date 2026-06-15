@@ -219,7 +219,7 @@ pub fn detect_path() -> String {
 
 // ── DETECT DRIVE TYPE ──────────────────────────────────────
 // Figures out whether the backup drive is:
-//   - HDD (slow, 3 parallel transfers)
+//   - HDD (slow, 1 parallel transfer)
 //   - SSD (fast, 8 parallel transfers)
 //   - NVMe (very fast, 16 parallel transfers)
 // This tunes the copy speed to avoid overwhelming the drive.
@@ -236,7 +236,7 @@ pub fn detect_checkers(path: &str) -> u32 {
             ));
             if name.starts_with("nvme") { 16 } else { 8 }
         }
-        _ => 3,
+        _ => 1,
     }
 }
 

@@ -25,7 +25,7 @@ pub fn do_restore(backup_dir: &str, dest_dir: &str, auto: bool) -> anyhow::Resul
     e(&format!("Backup: {}{}{}", W, backup_dir.display(), N));
     e(&format!("Restore to: {}{}{}", W, dest_dir.display(), N));
     let ck = detect_checkers(&dest_dir.to_string_lossy());
-    let kind = if ck <= 3 { "HDD" } else if ck <= 8 { "SSD" } else { "NVMe" };
+    let kind = if ck <= 1 { "HDD" } else if ck <= 8 { "SSD" } else { "NVMe" };
     e(&format!("Checkers: {} ({})", ck, kind));
 
     if !backup_dir.is_dir() {

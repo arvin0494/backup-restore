@@ -15,7 +15,7 @@ Backup your Linux system before reinstalling, then restore everything after.
 - **Incremental** — only new/changed files are transferred on re-runs
 - **Auto-detect path** — `/mnt/HDD4T/BACKUP/{hostname}[-{os_id}]`
 - **Live progress** — rclone `--progress` with file names, speed, ETA
-- **Drive-aware** — `--checkers` / `--transfers` tuned to HDD (3), SSD (8), or NVMe (16)
+- **Drive-aware** — `--checkers` / `--transfers` tuned to HDD (1), SSD (8), or NVMe (16)
 - **Robust cancellation** — Ctrl+C kills the entire rclone process group, not just the script
 - **Logging** — `backup.log` written alongside every backup
 - **Restore with fzf** — checkbox-style multi-select (falls back to numbered menu)
