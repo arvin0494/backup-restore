@@ -336,3 +336,6 @@ Write-Host ""
 Success "Install complete!"
 Step "Run $B$bckup -b$N or $B$bckup --help$N"
 Write-Host ""
+
+# Auto-exit so the window closes
+exit
