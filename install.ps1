@@ -56,7 +56,60 @@ function Test-Command {
     $null -ne (Get-Command $name -ErrorAction SilentlyContinue)
 }
 
-# --- 1. RUST ---
+# --- 1. WINGET/CHOCO INSTALLATION ---
+function Ensure-Winget {
+    if (Test-Command winget) { return $true }
+    Show-Warn "winget not found. Trying to install..."
+    # Check if Microsoft Store is available
+    $storeAvailable = Get-AppxPackage -Name "Microsoft.WindowsStore" -ErrorAction SilentlyContinue
+    if ($storeAvailable) {
+        Show-Step "Installing winget from Microsoft Store..."
+        start ms-windows-store://pdp/?ProductId=9NBLGGH4NNS1
+        Show-Warn "Store opened. Please install winget, then re-run this script."
+        Write-Host ""
+        Write-Host "  Press Enter to close..." -ForegroundColor DarkGray
+        Read-Host | Out-Null
+        exit
+    }
+    # Try installing via AppInstaller (MSIX)
+    $appInstaller = Get-AppxPackage -Name "Microsoft.DesktopAppInstaller" -ErrorAction SilentlyContinue
+    if ($appInstaller) {
+        Show-Step "Updating AppInstaller..."
+        Get-AppxPackage -Name "Microsoft.DesktopAppInstaller" | ForEach-Object {
+            Add-AppxPackage -Register "$($_.InstallLocation)\AppXManifest.xml" -ErrorAction SilentlyContinue
+        }
+        Start-Sleep -Seconds 10
+        if (Test-Command winget) {
+            Show-Ok "winget installed"
+            return $true
+        }
+    }
+    Show-Warn "Cannot install winget automatically."
+    Write-Host "  Download: https://aka.ms/getwinget"
+    return $false
+}
+
+function Ensure-Choco {
+    if (Test-Command choco) { return $true }
+    Show-Warn "choco not found. Trying to install..."
+    Show-Step "Installing Chocolatey..."
+    try {
+        Set-ExecutionPolicy Bypass -Scope Process -Force -ErrorAction SilentlyContinue
+        Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1')) 2>&1 | Out-Null
+        $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("PATH", "User")
+        Start-Sleep -Seconds 3
+        if (Test-Command choco) {
+            Show-Ok "choco installed"
+            return $true
+        }
+    } catch {
+        Show-Warn "choco install failed: $_"
+    }
+    Write-Host "  Install manually: https://chocolatey.org/install"
+    return $false
+}
+
+# --- 2. RUST ---
 function Ensure-Rust {
     if (Test-Command rustc -and Test-Command cargo) {
         $ver = & rustc --version 2>&1
@@ -66,6 +119,24 @@ function Ensure-Rust {
 
     Write-Host ""
     Show-Warn "Rust is not installed."
+
+    # Try to install winget if not available
+    if (-not (Test-Command winget) -and -not (Test-Command choco)) {
+        Show-Warn "No package manager found. Trying to install..."
+        $wingetOk = Ensure-Winget
+        $chocoOk = $false
+        if (-not $wingetOk) { $chocoOk = Ensure-Choco }
+        if (-not $wingetOk -and -not $chocoOk) {
+            Show-Warn "Cannot install package managers automatically."
+            Write-Host "  Install winget: https://aka.ms/getwinget"
+            Write-Host "  Install choco: https://chocolatey.org/install"
+            Write-Host "  Then re-run this script."
+            Write-Host ""
+            Write-Host "  Press Enter to close..." -ForegroundColor DarkGray
+            Read-Host | Out-Null
+            exit
+        }
+    }
 
     # Try winget first (more reliable on IoT LTSC)
     if (Test-Command winget) {
@@ -331,21 +402,26 @@ Show-Info "User: $env:USERNAME"
 Show-Info "Target: $BIN_PATH"
 
 Write-Host ""
-Show-Section "1" "Fetching source"
+Show-Section "1" "Package managers"
+Ensure-Winget
+Ensure-Choco
+
+Write-Host ""
+Show-Section "2" "Fetching source"
 Ensure-Rust
 Clone-Repo
 
 Write-Host ""
-Show-Section "1.5" "Checking dependencies"
+Show-Section "2.5" "Checking dependencies"
 Ensure-Fzf
 Ensure-Rclone
 
 Write-Host ""
-Show-Section "2" "Building binary"
+Show-Section "3" "Building binary"
 Build-Binary
 
 Write-Host ""
-Show-Section "3" "Setting up"
+Show-Section "4" "Setting up"
 Set-Alias
 Create-Config
 
