@@ -64,10 +64,13 @@ ensure_rust() {
     case "${ans:-1}" in
         1|"")
             step "Installing rustup…"
+            local log=$(mktemp)
             curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
-                | sh -s -- -y --no-modify-path >/dev/null 2>&1
+                | sh -s -- -y --no-modify-path >"$log" 2>&1 &
+            spin $! "Installing rustup"
             . "$HOME/.cargo/env"
             ok "Rust" "$(rustc --version)"
+            rm -f "$log"
             ;;
         2)
             if command -v pacman &>/dev/null; then
