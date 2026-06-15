@@ -196,6 +196,10 @@ pub fn do_restore(backup_dir: &str, dest_dir: &str, auto: bool) -> anyhow::Resul
             for entry in entries.flatten() {
                 if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
                     let sub = entry.file_name().to_string_lossy().to_string();
+                    // Skip hidden Linux directories when restoring to Windows
+                    if platform == "windows" && sub.starts_with('.') {
+                        continue;
+                    }
                     let (a, b) = (bd.clone(), dd.clone());
                     let s = sub.clone();
                     items.push((format!("home-{}", sub), format!("Restore ~/{}", sub), Some(Box::new(move || { let _ = copy_progress(&format!("{}/home/{}/", a, s), &format!("{}/{}/", b, s), ck, false, &[]); }))));
