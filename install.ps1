@@ -104,7 +104,7 @@ function Ensure-Rust {
 
     Show-Step "Installing rustup..."
     try {
-        $installOut = & $rustupPath /y --no-modify-path 2>&1
+        $installOut = & $rustupPath --yes --no-modify-path 2>&1
         Write-Host $installOut
     } catch {
         Show-Fail "Install failed: $_"
