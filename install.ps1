@@ -1,5 +1,8 @@
 # backup-restore installer for Windows
 # Uses bundled deps/ folder. Downloads only if deps are missing.
+#
+# One-liner install (open PowerShell, paste):
+#   powershell -NoProfile -ExecutionPolicy Bypass -Command "iwr -useb https://raw.githubusercontent.com/arvin0494/backup-restore/main/install.ps1 | iex"
 
 # Auto-elevate to Administrator if needed (required for PATH modification)
 $isAdmin = [Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()

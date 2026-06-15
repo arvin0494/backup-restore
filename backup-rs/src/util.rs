@@ -36,13 +36,18 @@ pub fn log_append(s: &str) {
 // These variables let the program print text in different
 // colors in the terminal (red, green, yellow, cyan, white, bold).
 // The "N" variable resets the color back to normal.
-pub static R: &str = "\x1b[0;31m";
-pub static G: &str = "\x1b[0;32m";
-pub static Y: &str = "\x1b[0;33m";
-pub static C: &str = "\x1b[0;36m";
-pub static W: &str = "\x1b[1;37m";
-pub static BOLD: &str = "\x1b[1m";
-pub static N: &str = "\x1b[0m";
+// Respects NO_COLOR env var (set to disable colors, e.g., on Windows).
+static NO_COLOR: OnceLock<bool> = OnceLock::new();
+fn no_color() -> bool {
+    *NO_COLOR.get_or_init(|| std::env::var("NO_COLOR").unwrap_or_default().len() > 0)
+}
+pub static R: &str = if no_color() { "" } else { "\x1b[0;31m" };
+pub static G: &str = if no_color() { "" } else { "\x1b[0;32m" };
+pub static Y: &str = if no_color() { "" } else { "\x1b[0;33m" };
+pub static C: &str = if no_color() { "" } else { "\x1b[0;36m" };
+pub static W: &str = if no_color() { "" } else { "\x1b[1;37m" };
+pub static BOLD: &str = if no_color() { "" } else { "\x1b[1m" };
+pub static N: &str = if no_color() { "" } else { "\x1b[0m" };
 
 // ── PRINT MESSAGE ─────────────────────────────────────────
 // Shows a message in the terminal (with a "[*]" prefix) and
