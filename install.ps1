@@ -1,4 +1,5 @@
 # backup-restore installer for Windows
+# Uses bundled deps/ folder. Downloads only if deps are missing.
 
 $ErrorActionPreference = "Continue"
 
@@ -9,6 +10,11 @@ $DEST       = "$env:USERPROFILE\Projects\backup-restore"
 $BIN_NAME   = "backup.exe"
 $BIN_DIR    = "$env:USERPROFILE\bin"
 $BIN_PATH   = "$BIN_DIR\$BIN_NAME"
+$SCRIPT_DIR = Split-Path -Parent $MyInvocation.MyCommand.Path
+$DEPS_DIR   = Join-Path $SCRIPT_DIR "deps"
+$RUSTUP_EXE = Join-Path $DEPS_DIR "rustup-init.exe"
+$RCLONE_ZIP = Join-Path $DEPS_DIR "rclone-v1.71.0-windows-amd64.zip"
+$FZF_ZIP    = Join-Path $DEPS_DIR "fzf-0.73.1-windows_amd64.zip"
 
 $R  = "`e[31m"; $G  = "`e[32m"; $Y  = "`e[33m"; $C  = "`e[36m"
 $W  = "`e[37m"; $B = "`e[1m";  $D = "`e[2m"; $N = "`e[0m"
@@ -34,82 +40,12 @@ function Show-Info   { Write-Host "  [*] $args" -ForegroundColor DarkGray }
 function Show-Success { Write-Host ""; Write-Host "  SUCCESS: $args" -ForegroundColor Green; Write-Host "" }
 function Show-Fail   { Write-Host ""; Write-Host "  FAIL: $args"; exit 1 }
 
-function Wait-Spin {
-    param($task, $cmd)
-    $spins = @('-','\','|','/')
-    $i = 0
-    while ($true) {
-        Write-Host -NoNewline "`r  [$($spins[$i % 4])] $task"
-        $i++
-        Start-Sleep -Milliseconds 100
-        $result = & $cmd
-        if ($null -ne $result -or $true) {
-            break
-        }
-    }
-    Write-Host ""
-    Write-Host "  [OK] $task" -ForegroundColor Green
-}
-
 function Test-Command {
     param($name)
     $null -ne (Get-Command $name -ErrorAction SilentlyContinue)
 }
 
-# --- 1. WINGET/CHOCO INSTALLATION ---
-function Ensure-Winget {
-    if (Test-Command winget) { return $true }
-    Show-Warn "winget not found. Trying to install..."
-    # Check if Microsoft Store is available
-    $storeAvailable = Get-AppxPackage -Name "Microsoft.WindowsStore" -ErrorAction SilentlyContinue
-    if ($storeAvailable) {
-        Show-Step "Installing winget from Microsoft Store..."
-        start ms-windows-store://pdp/?ProductId=9NBLGGH4NNS1
-        Show-Warn "Store opened. Please install winget, then re-run this script."
-        Write-Host ""
-        Write-Host "  Press Enter to close..." -ForegroundColor DarkGray
-        Read-Host | Out-Null
-        exit
-    }
-    # Try installing via AppInstaller (MSIX)
-    $appInstaller = Get-AppxPackage -Name "Microsoft.DesktopAppInstaller" -ErrorAction SilentlyContinue
-    if ($appInstaller) {
-        Show-Step "Updating AppInstaller..."
-        Get-AppxPackage -Name "Microsoft.DesktopAppInstaller" | ForEach-Object {
-            Add-AppxPackage -Register "$($_.InstallLocation)\AppXManifest.xml" -ErrorAction SilentlyContinue
-        }
-        Start-Sleep -Seconds 10
-        if (Test-Command winget) {
-            Show-Ok "winget installed"
-            return $true
-        }
-    }
-    Show-Warn "Cannot install winget automatically."
-    Write-Host "  Download: https://aka.ms/getwinget"
-    return $false
-}
-
-function Ensure-Choco {
-    if (Test-Command choco) { return $true }
-    Show-Warn "choco not found. Trying to install..."
-    Show-Step "Installing Chocolatey..."
-    try {
-        Set-ExecutionPolicy Bypass -Scope Process -Force -ErrorAction SilentlyContinue
-        Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1')) 2>&1 | Out-Null
-        $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("PATH", "User")
-        Start-Sleep -Seconds 3
-        if (Test-Command choco) {
-            Show-Ok "choco installed"
-            return $true
-        }
-    } catch {
-        Show-Warn "choco install failed: $_"
-    }
-    Write-Host "  Install manually: https://chocolatey.org/install"
-    return $false
-}
-
-# --- 2. RUST ---
+# --- 1. RUST (bundled rustup-init.exe) ---
 function Ensure-Rust {
     if (Test-Command rustc -and Test-Command cargo) {
         $ver = & rustc --version 2>&1
@@ -117,97 +53,40 @@ function Ensure-Rust {
         return
     }
 
-    Write-Host ""
-    Show-Warn "Rust is not installed."
+    Show-Warn "Rust is not installed. Installing from bundled deps..."
 
-    # Try to install winget if not available
-    if (-not (Test-Command winget) -and -not (Test-Command choco)) {
-        Show-Warn "No package manager found. Trying to install..."
-        $wingetOk = Ensure-Winget
-        $chocoOk = $false
-        if (-not $wingetOk) { $chocoOk = Ensure-Choco }
-        if (-not $wingetOk -and -not $chocoOk) {
-            Show-Warn "Cannot install package managers automatically."
-            Write-Host "  Install winget: https://aka.ms/getwinget"
-            Write-Host "  Install choco: https://chocolatey.org/install"
-            Write-Host "  Then re-run this script."
-            Write-Host ""
-            Write-Host "  Press Enter to close..." -ForegroundColor DarkGray
-            Read-Host | Out-Null
-            exit
-        }
+    # Use bundled rustup-init.exe
+    if (-not (Test-Path $RUSTUP_EXE)) {
+        Show-Warn "Bundled rustup not found in deps/. Downloading..."
+        $RUSTUP_EXE = "$env:TEMP\rustup-init.exe"
+        Invoke-WebRequest -Uri "https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-msvc/rustup-init.exe" -OutFile $RUSTUP_EXE -UseBasicParsing
     }
 
-    # Try winget first (more reliable on IoT LTSC)
-    if (Test-Command winget) {
-        Show-Step "Installing Rust via winget..."
-        try {
-            $result = winget install --id Rustlang.Rustup -e --silent --accept-package-agreements --accept-source-agreements 2>&1
-            Write-Host $result
-        } catch {
-            Show-Warn "winget install failed: $_"
-        }
-        if (Test-Path "$env:USERPROFILE\.cargo\bin") {
-            $env:PATH = "$env:USERPROFILE\.cargo\bin;$env:PATH"
-        }
-        Start-Sleep -Seconds 5
-        if (Test-Command rustc) {
-            $ver = & rustc --version 2>&1
-            Show-Ok "Rust $ver"
-            return
-        } else {
-            Show-Warn "winget install completed but rustc not found."
-        }
-    } else {
-        Show-Warn "winget not available."
-    }
-
-    # Fallback to rustup
-    Show-Step "Installing via rustup..."
-    $rustupPath = "$env:TEMP\rustup-init.exe"
+    Show-Step "Installing Rust (non-interactive)..."
+    $env:RUSTUP_INIT_NON_INTERACTIVE = "1"
+    $env:RUSTUP_INIT_NO_MODIFY_PATH = "1"
     try {
-        Show-Step "Downloading rustup..."
-        Invoke-WebRequest -Uri "https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-msvc/rustup-init.exe" -OutFile $rustupPath -UseBasicParsing -ErrorAction Stop
-        Show-Ok "Downloaded"
+        & $RUSTUP_EXE default-toolchain stable -y 2>&1 | Out-Null
+        $env:PATH = "$env:USERPROFILE\.cargo\bin;$env:PATH"
+        [System.Environment]::SetEnvironmentVariable("PATH", $env:PATH, "User")
     } catch {
-        Show-Fail "Download failed: $_. Install manually: https://rustup.rs"
+        Show-Fail "Rust installation failed: $_"
     }
-
-    Show-Step "Installing rustup..."
-    try {
-        $env:RUSTUP_INIT_NON_INTERACTIVE = "1"
-        $env:RUSTUP_INIT_NO_MODIFY_PATH = "1"
-        $installOut = & $rustupPath 2>&1
-        $rc = $LASTEXITCODE
+    finally {
         Remove-Item Env:\RUSTUP_INIT_NON_INTERACTIVE -ErrorAction SilentlyContinue
         Remove-Item Env:\RUSTUP_INIT_NO_MODIFY_PATH -ErrorAction SilentlyContinue
-        Write-Host $installOut
-        if ($rc -ne 0) {
-            Show-Warn "rustup-init returned error code $rc"
-            Write-Host "  Try running manually: $rustupPath"
-            Show-Fail "Rust installation aborted."
-        }
-    } catch {
-        Show-Fail "Install failed: $_"
-    }
-
-    Remove-Item $rustupPath -ErrorAction SilentlyContinue
-
-    if (Test-Path "$env:USERPROFILE\.cargo\bin") {
-        $env:PATH = "$env:USERPROFILE\.cargo\bin;$env:PATH"
     }
 
     Start-Sleep -Seconds 3
     if (Test-Command rustc) {
         $ver = & rustc --version 2>&1
         Show-Ok "Rust $ver"
-        return
+    } else {
+        Show-Fail "Rust installation failed. Try running $RUSTUP_EXE manually."
     }
-
-    Show-Fail "Rust installation failed. Install manually: https://rustup.rs"
 }
 
-# --- 2. FZF ---
+# --- 2. FZF (bundled zip) ---
 function Ensure-Fzf {
     if (Test-Command fzf) {
         $ver = & fzf --version 2>&1 | Select-Object -First 1
@@ -215,52 +94,30 @@ function Ensure-Fzf {
         return
     }
 
-    Show-Warn "fzf not found (needed for restore menu)"
-    $ans = Read-Host "  Install fzf? [y/N]"
-    if ($ans -ne "y" -and $ans -ne "Y") {
-        Show-Warn "fzf will be skipped. Restore menu will use readline instead."
-        return
+    Show-Warn "fzf not found. Installing from bundled deps..."
+
+    if (-not (Test-Path $FZF_ZIP)) {
+        Show-Warn "Bundled fzf not found in deps/. Downloading..."
+        $FZF_ZIP = "$env:TEMP\fzf.zip"
+        Invoke-WebRequest -Uri "https://github.com/junegunn/fzf/releases/download/v0.73.1/fzf-0.73.1-windows_amd64.zip" -OutFile $FZF_ZIP -UseBasicParsing
     }
 
-    if (Test-Command winget) {
-        Show-Step "Installing fzf via winget..."
-        winget install --id Junegunn.fzf -e --silent --accept-package-agreements --accept-source-agreements 2>&1 | Out-Null
-        if (Test-Command fzf) {
-            $ver = & fzf --version 2>&1 | Select-Object -First 1
-            Show-Ok "fzf $ver"
-            return
-        }
-    }
-
-    if (Test-Command choco) {
-        Show-Step "Installing fzf via choco..."
-        choco install fzf -y 2>&1 | Out-Null
-        if (Test-Command fzf) {
-            $ver = & fzf --version 2>&1 | Select-Object -First 1
-            Show-Ok "fzf $ver"
-            return
-        }
-    }
-
-    Show-Step "Downloading fzf manually..."
-    $fzfZip = "$env:TEMP\fzf.zip"
-    $fzfVer = "0.73.1"
-    Invoke-WebRequest -Uri "https://github.com/junegunn/fzf/releases/download/v$fzfVer/fzf-$fzfVer-windows.zip" -OutFile $fzfZip -UseBasicParsing
     $fzfDir = "$env:TEMP\fzf-install"
-    Expand-Archive -Path $fzfZip -DestinationPath $fzfDir -Force
-    Remove-Item $fzfZip -ErrorAction SilentlyContinue
+    Expand-Archive -Path $FZF_ZIP -DestinationPath $fzfDir -Force
+    $fzfExe = Join-Path $fzfDir "fzf-0.73.1-windows_amd64" "fzf.exe"
 
-    $fzfExe = Join-Path $fzfDir "fzf-$fzfVer-windows" "fzf.exe"
     if (Test-Path $fzfExe) {
         New-Item -ItemType Directory -Force -Path $BIN_DIR | Out-Null
         Copy-Item $fzfExe (Join-Path $BIN_DIR "fzf.exe")
+        $env:PATH = "$BIN_DIR;$env:PATH"
+        [System.Environment]::SetEnvironmentVariable("PATH", $env:PATH, "User")
         Show-Ok "fzf installed to $BIN_DIR"
     } else {
         Show-Fail "Could not extract fzf.exe."
     }
 }
 
-# --- 3. RCLONE ---
+# --- 3. RCLONE (bundled zip) ---
 function Ensure-Rclone {
     if (Test-Command rclone) {
         $ver = & rclone --version 2>&1 | Select-Object -First 1
@@ -268,42 +125,26 @@ function Ensure-Rclone {
         return
     }
 
-    Write-Host ""
-    Write-Host "  [ERROR] rclone not found." -ForegroundColor Red
-    Show-Step "Installing rclone..."
+    Show-Warn "rclone not found. Installing from bundled deps..."
 
-    $tried = $false
-
-    if (Test-Command winget) {
-        $tried = $true
-        Show-Step "Installing rclone via winget..."
-        winget install --id Rclone.Rclone -e --silent --accept-package-agreements --accept-source-agreements 2>&1 | Out-Null
-        if (Test-Command rclone) {
-            $ver = & rclone --version 2>&1 | Select-Object -First 1
-            Show-Ok "rclone $ver"
-            return
-        }
+    if (-not (Test-Path $RCLONE_ZIP)) {
+        Show-Warn "Bundled rclone not found in deps/. Downloading..."
+        $RCLONE_ZIP = "$env:TEMP\rclone.zip"
+        Invoke-WebRequest -Uri "https://github.com/rclone/rclone/releases/download/v1.71.0/rclone-v1.71.0-windows-amd64.zip" -OutFile $RCLONE_ZIP -UseBasicParsing
     }
 
-    if (Test-Command choco) {
-        $tried = $true
-        Show-Step "Installing rclone via choco..."
-        choco install rclone -y 2>&1 | Out-Null
-        if (Test-Command rclone) {
-            $ver = & rclone --version 2>&1 | Select-Object -First 1
-            Show-Ok "rclone $ver"
-            return
-        }
-    }
+    $rcloneDir = "$env:TEMP\rclone-install"
+    Expand-Archive -Path $RCLONE_ZIP -DestinationPath $rcloneDir -Force
+    $rcloneExe = Join-Path $rcloneDir "rclone-v1.71.0-windows-amd64" "rclone.exe"
 
-    if (-not $tried) {
-        Write-Host "  [ERROR] Winget and choco not found." -ForegroundColor Red
-        Write-Host "  Install winget: https://aka.ms/winget-cli/latest"
-        Write-Host "  Install choco: https://chocolatey.org/install"
-        Write-Host "  Or download rclone: https://rclone.org/downloads/"
-        Show-Fail "Could not install rclone automatically."
+    if (Test-Path $rcloneExe) {
+        New-Item -ItemType Directory -Force -Path $BIN_DIR | Out-Null
+        Copy-Item $rcloneExe (Join-Path $BIN_DIR "rclone.exe")
+        $env:PATH = "$BIN_DIR;$env:PATH"
+        [System.Environment]::SetEnvironmentVariable("PATH", $env:PATH, "User")
+        Show-Ok "rclone installed to $BIN_DIR"
     } else {
-        Show-Fail "rclone installation failed. Install manually: https://rclone.org/downloads/"
+        Show-Fail "Could not extract rclone.exe."
     }
 }
 
@@ -400,28 +241,33 @@ Show-Header
 
 Show-Info "User: $env:USERNAME"
 Show-Info "Target: $BIN_PATH"
+Show-Info "Deps: $DEPS_DIR"
+
+if (Test-Path $DEPS_DIR) {
+    Show-Ok "Bundled deps found: $(Get-ChildItem $DEPS_DIR | Measure-Object | Select-Object -ExpandProperty Count) files"
+} else {
+    Show-Warn "No deps/ folder found. Will download dependencies."
+}
 
 Write-Host ""
-Show-Section "1" "Package managers"
-Ensure-Winget
-Ensure-Choco
+Show-Section "1" "Installing Rust"
+Ensure-Rust
 
 Write-Host ""
 Show-Section "2" "Fetching source"
-Ensure-Rust
 Clone-Repo
 
 Write-Host ""
-Show-Section "2.5" "Checking dependencies"
+Show-Section "3" "Dependencies"
 Ensure-Fzf
 Ensure-Rclone
 
 Write-Host ""
-Show-Section "3" "Building binary"
+Show-Section "4" "Building binary"
 Build-Binary
 
 Write-Host ""
-Show-Section "4" "Setting up"
+Show-Section "5" "Setting up"
 Set-Alias
 Create-Config
 
