@@ -141,6 +141,17 @@ function Ensure-Fzf {
     }
 }
 
+# --- HELPER: Install Chocolatey if missing ---
+function Install-Choco {
+    if (Test-Command choco) { return }
+    Show-Warn "Chocolatey not found. Installing..."
+    Set-ExecutionPolicy Bypass -Scope Process -Force
+    [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+    iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+    $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("PATH", "User")
+    Show-Ok "Chocolatey installed"
+}
+
 # --- 3. RCLONE (bundled zip) ---
 function Ensure-Rclone {
     if (Test-Command rclone) {
@@ -319,6 +330,7 @@ Clone-Repo
 
 Write-Host ""
 Show-Section "3" "Dependencies"
+Install-Choco
 Ensure-Fzf
 Ensure-Rclone
 
