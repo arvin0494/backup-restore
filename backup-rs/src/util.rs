@@ -256,7 +256,10 @@ pub fn detect_checkers(path: &str) -> u32 {
 // Checks if we're running on Linux or Windows (WSL/MSYS).
 // Returns "linux" or "windows".
 pub fn detect_platform() -> &'static str {
-    if std::env::var("APPDATA").is_ok() {
+    if std::env::var("APPDATA").is_ok()
+        || std::env::var("SYSTEMDRIVE").is_ok()
+        || std::env::var("COMPUTERNAME").is_ok()
+    {
         "windows"
     } else {
         "linux"

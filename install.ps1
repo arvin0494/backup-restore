@@ -267,7 +267,8 @@ function Set-Alias {
     }
 
     New-Item -ItemType Directory -Force -Path (Split-Path $profilePath) | Out-Null
-    $block = "`n# backup-restore`n$pathLine`n$aliasLine"
+    $nocolLine = '$env:NO_COLOR = "1"'
+    $block = "`n# backup-restore`n$nocolLine`n$pathLine`n$aliasLine"
     if (Test-Path $profilePath) {
         Add-Content -Path $profilePath -Value $block
     } else {
