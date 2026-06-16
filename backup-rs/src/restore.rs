@@ -196,8 +196,9 @@ pub fn do_restore(backup_dir: &str, dest_dir: &str, auto: bool) -> anyhow::Resul
             for entry in entries.flatten() {
                 if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
                     let sub = entry.file_name().to_string_lossy().to_string();
-                    // Skip hidden Linux directories when restoring to Windows
-                    if platform == "windows" && sub.starts_with('.') {
+                    // Skip Linux-only hidden directories when restoring to Windows
+                    let linux_only = [".config", ".local", ".var", ".dbus", ".pki"];
+                    if platform == "windows" && linux_only.contains(&sub.as_str()) {
                         continue;
                     }
                     let (a, b) = (bd.clone(), dd.clone());
