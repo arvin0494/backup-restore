@@ -161,10 +161,10 @@ pub fn do_restore(backup_dir: &str, dest_dir: &str, auto: bool) -> anyhow::Resul
         }
     }
 
-   // ── KEYRINGS ───────────────────────────────────────────
+    // ── KEYRINGS ───────────────────────────────────────────
     // Restore your password keyrings (stored passwords). Linux only.
     if platform == "linux" {
-        let keyrings = format!("{}/keyrings", bd);
+        let keyrings = format!("{}/.local/share/keyrings", bd);
         if Path::new(&keyrings).is_dir() {
             let (src, dst) = (keyrings.clone(), dd.clone());
             items.push(("keyrings".into(), "Restore keyrings (~/.local/share/keyrings)".into(), Some(Box::new(move || { let _ = copy_progress(&format!("{}/", src), &format!("{}/.local/share/keyrings/", dst), ck, false, &[]); }))));

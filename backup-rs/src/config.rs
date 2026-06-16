@@ -113,7 +113,9 @@ pub fn android_ftp_pass() -> String {
 }
 
 fn get_config_path() -> PathBuf {
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/root".into());
+    let home = crate::HOME.get().cloned().unwrap_or_else(|| {
+        std::env::var("HOME").unwrap_or_else(|_| "/root".into())
+    });
     PathBuf::from(home).join(".config").join("backup-restore").join("config")
 }
 

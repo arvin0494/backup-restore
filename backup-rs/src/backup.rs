@@ -277,7 +277,7 @@ pub fn backup_home(dest: &str, ck: u32) -> anyhow::Result<()> {
         extra_args.push("--exclude");
         extra_args.push(x);
     }
-    e(&format!("  {}~{}{} → ...", W, N, N));
+    e(&format!("  {}~{} → ...", W, N));
     let use_sudo = detect_platform() == "linux";
     copy_progress(&format!("{}/", crate::HOME.get().unwrap()), &home_dest, ck, use_sudo, &extra_args)?;
     Ok(())
@@ -362,7 +362,10 @@ pub fn do_backup(dest: &str, auto_yes: bool) -> anyhow::Result<()> {
     init_log(format!("{}/backup.log", dest_str));
 
     e(&format!("Target: {}{}{}", W, dest.display(), N));
-    if complete_marker.exists() {
+    if dest.exists() && !complete_marker.exists() {
+        e(&format!("{}Incomplete backup detected — cleaning up{}", Y, N));
+        std::fs::remove_dir_all(dest).ok();
+    } else if complete_marker.exists() {
         e(&format!("{}Warning: backup already exists at this location{}", Y, N));
         if !auto_yes {
             print!("  Overwrite existing backup? [y/N] ");
