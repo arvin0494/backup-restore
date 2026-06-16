@@ -1,24 +1,25 @@
 # backup-restore
 
-Backup your Linux system before reinstalling, then restore everything after.
+Backup your Linux system before reinstalling, then restore everything after — including on Windows.
 
 ## Features
 
-- **Package lists** — pacman official, AUR (yay), flatpak, snap
+- **Package lists** — pacman official, AUR (yay), flatpak, snap, dpkg, dnf, zypper, apk
 - **Configs** — `~/.config`, `~/.ssh`, `~/.gnupg`, keyrings (caches/trash excluded)
 - **Browser data** — Firefox, Chromium, Chrome, Brave (profiles, caches excluded)
-- **Home data** — full `~/` via `sudo rclone` (excludes `.cache`, `node_modules`, `Games/`, etc.)
+- **Home data** — full `~/` via `rclone` with progress (excludes `.cache`, `node_modules`, `Games/`, etc.)
 - **Size estimation** — `gdu` scans home subdirs in parallel with package lists
-- **Virt-manager** — libvirt VM configs (`/etc/libvirt/qemu`) and disk images (`/var/lib/libvirt/images`)
-- **Android backup** — SMS, contacts, call logs, installed apps, device properties
-- **Android media via FTP** — rclone copy over FTP (DCIM, Download, Pictures, Movies, Music, MIUI)
+- **Virt-manager** — libvirt VM configs and disk images
+- **Android backup** — SMS, contacts, call logs, installed apps, device properties, media via FTP
 - **Incremental** — only new/changed files are transferred on re-runs
-- **Auto-detect path** — `/mnt/HDD4T/BACKUP/{hostname}[-{os_id}]`
+- **Auto-detect path** — Linux: `/mnt/HDD4T/BACKUP/{hostname}[-{os_id}]`, Windows: `D:\BACKUP\{hostname}`
 - **Live progress** — rclone `--progress` with file names, speed, ETA
-- **Drive-aware** — `--checkers` / `--transfers` tuned to HDD (1), SSD (8), or NVMe (16)
+- **Drive-aware** — checkers/transfers tuned to HDD (1), SSD (8), or NVMe (16)
 - **Robust cancellation** — Ctrl+C kills the entire rclone process group, not just the script
 - **Logging** — `backup.log` written alongside every backup
 - **Restore with fzf** — checkbox-style multi-select (falls back to numbered menu)
+- **Cross-platform** — backup on Linux, restore on Windows (skips Linux-specific dirs like `.config`, `.local`, `.var`)
+- **NO_COLOR support** — respects `NO_COLOR` env var (auto-set on Windows)
 
 ## Get the tool
 
@@ -48,7 +49,7 @@ Quick one-liner (PowerShell):
 powershell -NoProfile -ExecutionPolicy Bypass -Command "iwr -useb https://raw.githubusercontent.com/arvin0494/backup-restore/main/install.ps1 | iex"
 ```
 
-This downloads `rclone` and `fzf`, installs Rust via `rustup`, builds the binary, and adds the `bckup` alias to your PowerShell profile.
+This downloads `rclone` and `fzf`, installs Rust via `rustup`, builds or downloads the binary, and adds the `bckup` alias to your PowerShell profile with `NO_COLOR` set.
 
 If you prefer cloning first:
 
@@ -58,19 +59,29 @@ cd backup-restore
 .\install.ps1
 ```
 
-Requires administrator access (for PATH modification). Chocolatey is auto-installed if not present.
+Requires administrator access (for PATH modification). Chocolatey and MinGW are auto-installed if needed for local compilation.
 
 ## Dependencies
 
-Auto‑installed by `install.sh` (pacman, apt, dnf, zypper, apk):
+### Linux
+
+Auto-installed by `install.sh` (pacman, apt, dnf, zypper, apk):
 
 - `rclone` — fast cloud/local sync with progress display
 - `gdu` — parallel disk usage estimation
 - `fzf` — fuzzy multi-select for restore
 
+### Windows
+
+Installed by `install.ps1` from bundled `deps/` folder or downloaded on demand:
+
+- `rclone` — file sync
+- `fzf` — fuzzy selection
+- `Rust` (via rustup) — compilation
+
 ## Usage
 
-After `install.sh` you can use the `bckup` command directly.
+After install, use the `bckup` command directly on both Linux and Windows.
 
 ### Configuration
 
@@ -116,6 +127,8 @@ bckup -r /path/to/backup
 bckup -r /path/to/backup -y
 ```
 
+Cross-platform: restore a Linux backup on Windows — hidden Linux-only directories (`.config`, `.local`, `.var`) are automatically skipped.
+
 ### Android
 
 ```bash
@@ -140,18 +153,43 @@ bckup
 
 ## Uninstall
 
+### Linux
+
 ```bash
 bash ~/.local/share/backup-restore/uninstall.sh
 ```
 
-Or re-run the curl one-liner to reinstall.
+### Windows
+
+Remove the alias from your PowerShell profile (`$PROFILE`) and delete `C:\Users\<you>\bin\`.
+
+## Build from source
+
+### Linux
+
+```bash
+cd backup-rs
+cargo build --release
+```
+
+### Windows
+
+```bash
+cd backup-rs
+cargo build --release
+```
+
+Requires MSVC Build Tools or MinGW. The installer handles this automatically.
 
 ## Notes
 
 - Config file at `~/.config/backup-restore/config` overrides built-in paths
-- `sudo` is required for home backup (permissions, symlinks) and VM data
+- On Linux, `sudo` is required for home backup (permissions, symlinks) and VM data
+- On Windows, `sudo` is not used — home backup runs as the current user
 - NTFS destination: uses `--inplace` to avoid ENOSPC from ntfs-3g temp files; if ENOSPC occurs, run `sudo ntfsfix /dev/sda1`
-- `.steam` and `.var` are intentionally kept in home backup (user data, not cache)
+- `.steam` and `.var` are kept in home backup (user data, not cache)
 - `Games/` is excluded from home backup — use [`backup-games`](https://github.com/arvin0494/backup-games) separately for game data
 - gdu estimation scans home directories (Documents, Pictures, Projects, etc.) ignoring `.cache`, `node_modules`, etc.
 - Incomplete backups (missing `.complete` marker) are auto-cleaned on next run
+- On Windows, `NO_COLOR=1` is automatically set in the PowerShell profile to disable ANSI codes
+- `--links` flag is only used on Linux (Windows symlinks require admin privileges)
