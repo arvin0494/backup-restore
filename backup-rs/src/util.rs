@@ -288,6 +288,15 @@ pub fn install_deps() -> bool {
         if run_ok("where rclone") {
             return true;
         }
+        // Check USERPROFILE\bin (installed by install.ps1 but not yet on PATH)
+        let userprofile = std::env::var("USERPROFILE").unwrap_or_default();
+        let bin_dir = format!("{}\\bin", userprofile);
+        let rclone_path = format!("{}\\rclone.exe", bin_dir);
+        if !userprofile.is_empty() && Path::new(&rclone_path).exists() {
+            let old = std::env::var("PATH").unwrap_or_default();
+            std::env::set_var("PATH", format!("{};{}", bin_dir, old));
+            return true;
+        }
         e(&format!("{}rclone not found.{}", R, N));
         let mut tried = false;
         // Winget (built into Win10 1809+, Win11)

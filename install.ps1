@@ -326,7 +326,15 @@ Set-Alias
 Create-Config
 
 Show-Success "Install complete!"
-Show-Step "Run $Bbckup -b$N or $Bbckup --help$N"
+Show-Step "Run ${B}bckup -b$N or ${B}bckup --help$N"
+
+# Reload profile to apply PATH and NO_COLOR changes immediately
+try {
+    . $PROFILE
+    Show-Ok "Profile reloaded - changes apply now"
+} catch {
+    Show-Warn "Restart PowerShell or run: . `$PROFILE"
+}
 
 Write-Host ""
 Write-Host "  Press Enter to close..." -ForegroundColor DarkGray
