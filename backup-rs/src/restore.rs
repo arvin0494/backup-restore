@@ -203,7 +203,12 @@ pub fn do_restore(backup_dir: &str, dest_dir: &str, auto: bool) -> anyhow::Resul
                     }
                     let (a, b) = (bd.clone(), dd.clone());
                     let s = sub.clone();
-                    items.push((format!("home-{}", sub), format!("Restore ~/{}", sub), Some(Box::new(move || { let _ = copy_progress(&format!("{}/home/{}/", a, s), &format!("{}/{}/", b, s), ck, false, &[]); }))));
+                    let sep = if platform == "windows" { "\\" } else { "/" };
+                    items.push((format!("home-{}", sub), format!("Restore ~/{}", sub), Some(Box::new(move || {
+                        let src = format!("{sep}home{sep}{s}{sep}");
+                        let dst = format!("{sep}{s}{sep}");
+                        let _ = copy_progress(&format!("{a}{src}"), &format!("{b}{dst}"), ck, false, &[]);
+                    }))));
                 }
             }
         }
