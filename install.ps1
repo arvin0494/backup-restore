@@ -212,33 +212,25 @@ function Build-Binary {
         $msvcFound = Test-Path "C:\Program Files (x86)\Microsoft Visual Studio\2019\*\VC\Tools\MSVC\*\bin\Hostx64\x64\link.exe" -ErrorAction SilentlyContinue
     }
 
-    if (-not $msvcFound) {
-        Show-Warn "No MSVC linker found. Downloading pre-built binary from GitHub releases..."
-        $releaseUrl = "https://github.com/arvin0494/backup-restore/releases/latest/download/backup.exe"
-        $cachedBin = "$env:TEMP\backup.exe"
+    # Try local build first (always up-to-date)
+    Show-Step "Compiling locally..."
+    $result = cargo build --release --manifest-path (Join-Path $cargoDir "Cargo.toml") 2>&1
+    Write-Host $result
 
-        # Try downloading from releases; fallback to build attempt
-        try {
-            Invoke-WebRequest -Uri $releaseUrl -OutFile $cachedBin -UseBasicParsing -ErrorAction Stop
-            Show-Ok "Downloaded pre-built binary"
-            $binary = $cachedBin
-        } catch {
-            Show-Warn "Could not download pre-built binary. Trying local build (requires MSVC Build Tools)..."
-            Show-Step "Compiling..."
-            $result = cargo build --release --manifest-path (Join-Path $cargoDir "Cargo.toml") 2>&1
-            Write-Host $result
-
-            if (-not $?) {
-                Show-Fail "Build failed. Install 'Visual Studio Build Tools 2022' with 'Desktop development with C++' workload."
+    if (-not $?) {
+        if (-not $msvcFound) {
+            Show-Warn "Local build failed. Downloading pre-built binary from GitHub releases..."
+            $releaseUrl = "https://github.com/arvin0494/backup-restore/releases/latest/download/backup.exe"
+            $cachedBin = "$env:TEMP\backup.exe"
+            try {
+                Invoke-WebRequest -Uri $releaseUrl -OutFile $cachedBin -UseBasicParsing -ErrorAction Stop
+                Show-Ok "Downloaded pre-built binary from releases"
+                $binary = $cachedBin
+            } catch {
+                Show-Fail "Could not download pre-built binary. Install MSVC Build Tools 2022."
             }
-        }
-    } else {
-        Show-Step "Compiling (MSVC)..."
-        $result = cargo build --release --manifest-path (Join-Path $cargoDir "Cargo.toml") 2>&1
-        Write-Host $result
-
-        if (-not $?) {
-            Show-Fail "Build failed."
+        } else {
+            Show-Fail "Build failed. Install 'Visual Studio Build Tools 2022' with 'Desktop development with C++' workload."
         }
     }
 
