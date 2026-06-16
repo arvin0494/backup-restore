@@ -8,7 +8,14 @@
 $isAdmin = [Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()
 if (-not $isAdmin.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
     $scriptPath = $MyInvocation.MyCommand.Path
-    Start-Process powershell -ArgumentList "-NoProfile", "-ExecutionPolicy Bypass", "-File", "`"$scriptPath`"" -Verb RunAs
+    if ([string]::IsNullOrEmpty($scriptPath)) {
+        # Running via iex one-liner — re-download and re-invoke as admin
+        $repoUrl = "https://raw.githubusercontent.com/$REPO/main/install.ps1"
+        Write-Host "  [!] Elevating to Administrator..." -ForegroundColor Yellow
+        Start-Process powershell -ArgumentList "-NoProfile", "-ExecutionPolicy Bypass", "-Command", "iwr -useb '$repoUrl' | iex" -Verb RunAs
+    } else {
+        Start-Process powershell -ArgumentList "-NoProfile", "-ExecutionPolicy Bypass", "-File", "`"$scriptPath`"" -Verb RunAs
+    }
     exit
 }
 
@@ -26,6 +33,8 @@ $DEPS_DIR   = Join-Path $SCRIPT_DIR "deps"
 $RUSTUP_EXE = Join-Path $DEPS_DIR "rustup-init.exe"
 $RCLONE_ZIP = Join-Path $DEPS_DIR "rclone-v1.71.0-windows-amd64.zip"
 $FZF_ZIP    = Join-Path $DEPS_DIR "fzf-0.73.1-windows_amd64.zip"
+$CHOCO_INSTALLER = Join-Path $DEPS_DIR "choco-install.ps1"
+$ZA_EXE     = Join-Path $DEPS_DIR "7za.exe"
 
 $R  = "`e[31m"; $G  = "`e[32m"; $Y  = "`e[33m"; $C  = "`e[36m"
 $W  = "`e[37m"; $B = "`e[1m";  $D = "`e[2m"; $N = "`e[0m"
@@ -144,10 +153,15 @@ function Ensure-Fzf {
 # --- HELPER: Install Chocolatey if missing ---
 function Install-Choco {
     if (Test-Command choco) { return }
-    Show-Warn "Chocolatey not found. Installing..."
-    Set-ExecutionPolicy Bypass -Scope Process -Force
-    [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
-    iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+    if (Test-Path $CHOCO_INSTALLER) {
+        Show-Warn "Chocolatey not found. Installing from bundled deps..."
+        & $CHOCO_INSTALLER
+    } else {
+        Show-Warn "Chocolatey not found. Downloading..."
+        Set-ExecutionPolicy Bypass -Scope Process -Force
+        [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+        iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+    }
     $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("PATH", "User")
     Show-Ok "Chocolatey installed"
 }
