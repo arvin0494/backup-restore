@@ -269,7 +269,10 @@ pub fn backup_home(dest: &str, ck: u32) -> anyhow::Result<()> {
     e("Backing up home data");
     let home_dest = format!("{}/home", dest);
     
-    let mut extra_args: Vec<&str> = vec!["--links"];
+    let mut extra_args: Vec<&str> = Vec::new();
+    if detect_platform() == "linux" {
+        extra_args.push("--links");
+    }
     for &x in HOME_EXCLUDES.iter() {
         extra_args.push("--exclude");
         extra_args.push(x);
