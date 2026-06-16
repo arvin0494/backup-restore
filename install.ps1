@@ -15,7 +15,7 @@ if (-not $isAdmin.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrato
 $ErrorActionPreference = "Continue"
 
 $REPO       = "arvin0494/backup-restore"
-$BRANCH     = "feat/cross-platform"
+$BRANCH     = "main"
 $HTTPS_URL  = "https://github.com/$REPO.git"
 $DEST       = "$env:USERPROFILE\Projects\backup-restore"
 $BIN_NAME   = "backup.exe"
@@ -205,53 +205,26 @@ function Clone-Repo {
 function Build-Binary {
     $cargoDir = "$DEST\backup-rs"
     $binary = Join-Path $cargoDir "target\release\backup.exe"
-    $target = "x86_64-pc-windows-msvc"
 
-    # Check for MSVC linker
-    $msvcFound = Test-Path "C:\Program Files\Microsoft Visual Studio\2022\*\VC\Tools\MSVC\*\bin\Hostx64\x64\link.exe" -ErrorAction SilentlyContinue
-    if (-not $msvcFound) {
-        $msvcFound = Test-Path "C:\Program Files (x86)\Microsoft Visual Studio\2019\*\VC\Tools\MSVC\*\bin\Hostx64\x64\link.exe" -ErrorAction SilentlyContinue
-    }
-
-    # If no MSVC, check for MinGW and set target
-    if (-not $msvcFound) {
-        $mingwFound = (Test-Command gcc) -or (Test-Command x86_64-w64-mingw32-gcc)
-        if (-not $mingwFound) {
-            if (Test-Command choco) {
-                Show-Warn "No compiler found. Installing MinGW (smaller than MSVC Build Tools)..."
-                choco install mingw -y 2>&1 | Out-Null
-                $mingwFound = (Test-Command gcc)
-            }
-        }
-        if ($mingwFound) {
-            $target = "x86_64-pc-windows-gnu"
-            Show-Step "Adding Rust target: $target"
-            rustup target add $target 2>&1 | Out-Null
-        }
-    }
-
-    # Try local build (always up-to-date)
-    Show-Step "Compiling locally ($target)..."
-    $result = cargo build --release --target $target --manifest-path (Join-Path $cargoDir "Cargo.toml") 2>&1
-    Write-Host $result
-
-    if ($?) {
-        $binary = Join-Path $cargoDir "target\$target\release\backup.exe"
-    } else {
-        Show-Warn "Local build failed. Downloading pre-built binary from GitHub releases..."
-        $releaseUrl = "https://github.com/arvin0494/backup-restore/releases/latest/download/backup.exe"
-        $cachedBin = "$env:TEMP\backup.exe"
-        try {
-            Invoke-WebRequest -Uri $releaseUrl -OutFile $cachedBin -UseBasicParsing -ErrorAction Stop
-            Show-Ok "Downloaded pre-built binary from releases"
-            $binary = $cachedBin
-        } catch {
-            Show-Fail "Could not download pre-built binary. Install MSVC Build Tools or MinGW."
+    # Download pre-built binary from GitHub releases (fast, no compiler needed)
+    Show-Step "Downloading pre-built binary..."
+    $releaseUrl = "https://github.com/arvin0494/backup-restore/releases/latest/download/backup.exe"
+    $cachedBin = "$env:TEMP\backup.exe"
+    try {
+        Invoke-WebRequest -Uri $releaseUrl -OutFile $cachedBin -UseBasicParsing -ErrorAction Stop
+        Show-Ok "Downloaded from GitHub releases"
+        $binary = $cachedBin
+    } catch {
+        Show-Warn "Release download failed. Trying local build..."
+        $result = cargo build --release --manifest-path (Join-Path $cargoDir "Cargo.toml") 2>&1
+        Write-Host $result
+        if (-not $?) {
+            Show-Fail "Build failed. Install MSVC Build Tools 2022 with 'Desktop development with C++' workload."
         }
     }
 
     if (-not (Test-Path $binary)) {
-        Show-Fail "Build failed - binary not found."
+        Show-Fail "Binary not found."
     }
 
     Show-Step "Installing..."
