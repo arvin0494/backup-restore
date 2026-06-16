@@ -120,24 +120,36 @@ fn strip_ansi(s: &str) -> String {
 }
 
 // ── RUN COMMAND ────────────────────────────────────────────
+// Returns the platform-appropriate shell command and its arg prefix.
+fn shell_cmd() -> (&'static str, &'static str) {
+    if detect_platform() == "windows" {
+        ("cmd", "/c")
+    } else {
+        ("sh", "-c")
+    }
+}
+
 // Runs any shell command and returns the result (output + status).
 pub fn run(cmd: &str) -> anyhow::Result<Output> {
-    Ok(Command::new("sh").arg("-c").arg(cmd).output()?)
+    let (shell, flag) = shell_cmd();
+    Ok(Command::new(shell).arg(flag).arg(cmd).output()?)
 }
 
 // ── RUN AND CHECK SUCCESS ──────────────────────────────────
 // Runs a command and returns true/false depending on whether
 // it succeeded (e.g., "which rclone" → does rclone exist?).
 pub fn run_ok(cmd: &str) -> bool {
-    Command::new("sh").arg("-c").arg(cmd).output().is_ok_and(|o| o.status.success())
+    let (shell, flag) = shell_cmd();
+    Command::new(shell).arg(flag).arg(cmd).output().is_ok_and(|o| o.status.success())
 }
 
 // ── RUN WITH INPUT ─────────────────────────────────────────
 // Runs a command, sends it some text as input, and returns
 // whatever the command prints out (used for fzf selection).
 pub fn run_stdin(cmd: &str, input: &str) -> anyhow::Result<String> {
-    let mut child = Command::new("sh")
-        .arg("-c").arg(cmd)
+    let (shell, flag) = shell_cmd();
+    let mut child = Command::new(shell)
+        .arg(flag).arg(cmd)
         .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null())
         .spawn()?;
     if let Some(mut stdin) = child.stdin.take() {
@@ -151,8 +163,9 @@ pub fn run_stdin(cmd: &str, input: &str) -> anyhow::Result<String> {
 // Runs a command and returns whatever it printed to the screen
 // (or an empty string if it failed).
 pub fn run_stdout(cmd: &str) -> String {
-    Command::new("sh")
-        .arg("-c").arg(cmd)
+    let (shell, flag) = shell_cmd();
+    Command::new(shell)
+        .arg(flag).arg(cmd)
         .output().ok()
         .and_then(|o| {
             let s = String::from_utf8_lossy(&o.stdout).trim().to_string();
