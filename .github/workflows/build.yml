@@ -23,9 +23,8 @@ jobs:
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: latest
-          name: Latest Build
+          tag_name: build-${{ github.run_id }}
+          name: Build ${{ github.run_number }}
+          body: Automated build from commit ${{ github.sha }}
           files: backup-rs/target/release/backup.exe
-          overwrite_files: true
-          draft: false
-          prerelease: false
+          make_latest: true
