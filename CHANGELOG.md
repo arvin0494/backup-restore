@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.3.0 — 2026-06-16
+
+- **Bundled Windows deps**: Chocolatey installer & 7za in `deps/` — offline choco setup
+- **Admin elevation fix**: one-liner `iex` install now properly elevates to Administrator
+- **Config fix**: Windows config path respects `HOME` global, no longer defaults to `/root`
+- **Keyrings restore**: path now matches backup location — keyrings are found and restored
+- **Incomplete backup cleanup**: directories missing `.complete` marker are auto-removed on re-run
+
 ## v1.2.0 — 2026-06-15
 
 - **HDD backup tuning**: reduced checkers/transfers from 3 to 1 for rotational drives to avoid overwhelming slow disks
