@@ -227,7 +227,11 @@ pub fn fmt(size: u64) -> String {
 //   Windows: E:\BACKUP\{computer-name}
 // It uses the computer's hostname.
 pub fn detect_path() -> String {
-    let host = run_stdout("hostname -s");
+    let host = if detect_platform() == "windows" {
+        run_stdout("hostname")
+    } else {
+        run_stdout("hostname -s")
+    };
     let host = if host.is_empty() { "unknown".into() } else { host };
     let base = crate::config::backup_base();
     
