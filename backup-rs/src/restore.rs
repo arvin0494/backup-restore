@@ -66,8 +66,8 @@ pub fn do_restore(backup_dir: &str, dest_dir: &str, auto: bool) -> anyhow::Resul
         // Debian / Ubuntu packages
         if Path::new(&format!("{}/packages-dpkg.txt", bd)).exists() && run_ok("which dpkg") {
             let d = bd.clone();
-            items.push(("dpkg-pkgs".into(), "Install packages (dpkg/apt)".into(), Some(Box::new(move || {
-                let _ = run(&format!("sudo apt-get update && sudo apt-get install -y $(awk '{{print $1}}' '{}/packages-dpkg.txt')", d));
+            items.push(("dpkg-pkgs".into(), "Restore package selections (dpkg/apt)".into(), Some(Box::new(move || {
+                let _ = run(&format!("sudo dpkg --set-selections < '{}/packages-dpkg.txt' && sudo apt-get dselect-upgrade -y", d));
             }))));
         }
         // Fedora packages
@@ -95,6 +95,13 @@ pub fn do_restore(backup_dir: &str, dest_dir: &str, auto: bool) -> anyhow::Resul
         if Path::new(&format!("{}/flatpak-list.txt", bd)).exists() && run_ok("which flatpak") {
             let d = bd.clone();
             items.push(("flatpaks".into(), "Install Flatpaks".into(), Some(Box::new(move || { let _ = run(&format!("xargs flatpak install -y < '{}/flatpak-list.txt'", d)); }))));
+        }
+        // Snap packages
+        if Path::new(&format!("{}/snap-list.txt", bd)).exists() && run_ok("which snap") {
+            let d = bd.clone();
+            items.push(("snap-pkgs".into(), "Install Snap packages".into(), Some(Box::new(move || {
+                let _ = run(&format!("tail -n +2 '{}/snap-list.txt' | awk '{{print $1}}' | xargs sudo snap install 2>/dev/null", d));
+            }))));
         }
     } else if platform == "windows" {
         // Windows: note that package lists from Linux backups are not directly usable
