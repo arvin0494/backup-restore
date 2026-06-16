@@ -76,11 +76,11 @@ fn main() -> anyhow::Result<()> {
                     cli.dest.clone().unwrap_or_else(|| {
                         let dirs = adb::list_android_dirs();
                         if !dirs.is_empty() {
-                            eprintln!("  Available Android backups:");
-                            for d in &dirs {
-                                eprintln!("    {}{}{}", util::C, d, util::N);
+                                eprintln!("  Available Android backups:");
+                                for d in &dirs {
+                                    eprintln!("    {}", d);
+                                }
                             }
-                        }
                         print!("  Backup directory: ");
                         std::io::stdout().flush().ok();
                         let mut buf = String::new();
