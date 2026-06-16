@@ -61,7 +61,7 @@ pub fn save_package_lists(dest: &str) {
             commands.push(("dpkg --get-selections", "packages-dpkg.txt"));
         }
         "fedora" | "rhel" | "centos" | "rocky" | "almalinux" => {
-            commands.push((r"dnf list installed 2>/dev/null | tail -n +2 | awk '{print $1}'", "packages-dnf.txt"));
+            commands.push((r"dnf list --installed 2>/dev/null | tail -n +2 | awk '{print $1}'", "packages-dnf.txt"));
         }
         "opensuse" | "opensuse-tumbleweed" | "suse" | "opensuse-leap" => {
             commands.push((r"zypper se --installed-only -s 2>/dev/null | tail -n +5 | awk '{print $3}'", "packages-zypper.txt"));
@@ -73,7 +73,7 @@ pub fn save_package_lists(dest: &str) {
             commands.push(("pacman -Qqen", "packages-pacman-official.txt"));
             commands.push(("pacman -Qqem", "packages-aur.txt"));
             commands.push(("dpkg --get-selections", "packages-dpkg.txt"));
-            commands.push((r"dnf list installed 2>/dev/null | tail -n +2 | awk '{print $1}'", "packages-dnf.txt"));
+            commands.push((r"dnf list --installed 2>/dev/null | tail -n +2 | awk '{print $1}'", "packages-dnf.txt"));
             commands.push((r"zypper se --installed-only -s 2>/dev/null | tail -n +5 | awk '{print $3}'", "packages-zypper.txt"));
             commands.push(("apk info", "packages-apk.txt"));
         }
