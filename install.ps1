@@ -212,25 +212,37 @@ function Build-Binary {
         $msvcFound = Test-Path "C:\Program Files (x86)\Microsoft Visual Studio\2019\*\VC\Tools\MSVC\*\bin\Hostx64\x64\link.exe" -ErrorAction SilentlyContinue
     }
 
+    # Check for MinGW
+    $mingwFound = Test-Path "C:\msys64\mingw64\bin\gcc.exe" -ErrorAction SilentlyContinue -or
+                  (Test-Command x86_64-w64-mingw32-gcc) -or
+                  (Test-Command gcc)
+
+    # If no MSVC, try installing MinGW via choco
+    if (-not $msvcFound -and -not $mingwFound) {
+        if (Test-Command choco) {
+            Show-Warn "No compiler found. Installing MinGW (smaller than MSVC Build Tools)..."
+            choco install mingw -y 2>&1 | Out-Null
+            if (Test-Command gcc) {
+                $mingwFound = $true
+            }
+        }
+    }
+
     # Try local build first (always up-to-date)
     Show-Step "Compiling locally..."
     $result = cargo build --release --manifest-path (Join-Path $cargoDir "Cargo.toml") 2>&1
     Write-Host $result
 
     if (-not $?) {
-        if (-not $msvcFound) {
-            Show-Warn "Local build failed. Downloading pre-built binary from GitHub releases..."
-            $releaseUrl = "https://github.com/arvin0494/backup-restore/releases/latest/download/backup.exe"
-            $cachedBin = "$env:TEMP\backup.exe"
-            try {
-                Invoke-WebRequest -Uri $releaseUrl -OutFile $cachedBin -UseBasicParsing -ErrorAction Stop
-                Show-Ok "Downloaded pre-built binary from releases"
-                $binary = $cachedBin
-            } catch {
-                Show-Fail "Could not download pre-built binary. Install MSVC Build Tools 2022."
-            }
-        } else {
-            Show-Fail "Build failed. Install 'Visual Studio Build Tools 2022' with 'Desktop development with C++' workload."
+        Show-Warn "Local build failed. Downloading pre-built binary from GitHub releases..."
+        $releaseUrl = "https://github.com/arvin0494/backup-restore/releases/latest/download/backup.exe"
+        $cachedBin = "$env:TEMP\backup.exe"
+        try {
+            Invoke-WebRequest -Uri $releaseUrl -OutFile $cachedBin -UseBasicParsing -ErrorAction Stop
+            Show-Ok "Downloaded pre-built binary from releases"
+            $binary = $cachedBin
+        } catch {
+            Show-Fail "Could not download pre-built binary. Install MSVC Build Tools or MinGW."
         }
     }
 
