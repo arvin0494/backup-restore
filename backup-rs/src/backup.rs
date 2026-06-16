@@ -275,7 +275,8 @@ pub fn backup_home(dest: &str, ck: u32) -> anyhow::Result<()> {
         extra_args.push(x);
     }
     e(&format!("  {}~{}{} → ...", W, N, N));
-    copy_progress(&format!("{}/", crate::HOME.get().unwrap()), &home_dest, ck, true, &extra_args)?;
+    let use_sudo = detect_platform() == "linux";
+    copy_progress(&format!("{}/", crate::HOME.get().unwrap()), &home_dest, ck, use_sudo, &extra_args)?;
     Ok(())
 }
 
