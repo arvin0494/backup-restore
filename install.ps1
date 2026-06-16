@@ -204,26 +204,52 @@ function Clone-Repo {
 # --- 5. BUILD ---
 function Build-Binary {
     $cargoDir = "$DEST\backup-rs"
-    $binary = Join-Path $cargoDir "target\release\backup.exe"
+    $binary = ""
 
-    # Download pre-built binary from GitHub releases (fast, no compiler needed)
-    Show-Step "Downloading pre-built binary..."
-    $releaseUrl = "https://github.com/arvin0494/backup-restore/releases/latest/download/backup.exe"
-    $cachedBin = "$env:TEMP\backup.exe"
-    try {
-        Invoke-WebRequest -Uri $releaseUrl -OutFile $cachedBin -UseBasicParsing -ErrorAction Stop
-        Show-Ok "Downloaded from GitHub releases"
-        $binary = $cachedBin
-    } catch {
-        Show-Warn "Release download failed. Trying local build..."
-        $result = cargo build --release --manifest-path (Join-Path $cargoDir "Cargo.toml") 2>&1
+    # Step 1: Try local build with MSVC (fastest if available)
+    Show-Step "Compiling locally..."
+    $result = cargo build --release --manifest-path (Join-Path $cargoDir "Cargo.toml") 2>&1
+    if ($?) {
+        $binary = Join-Path $cargoDir "target\release\backup.exe"
+    } else {
         Write-Host $result
-        if (-not $?) {
-            Show-Fail "Build failed. Install MSVC Build Tools 2022 with 'Desktop development with C++' workload."
+        # Step 2: MSVC not found, install MinGW and use x86_64-pc-windows-gnu toolchain
+        Show-Warn "MSVC linker not found. Setting up MinGW..."
+        $gccFound = (Test-Command gcc) -or (Test-Command x86_64-w64-mingw32-gcc)
+        if (-not $gccFound) {
+            if (Test-Command choco) {
+                choco install mingw-w64 -y 2>&1 | Out-Null
+                # Refresh PATH from registry so newly installed tools are found
+                $env:PATH = [Environment]::GetEnvironmentVariable("PATH", "Machine") + ";" + [Environment]::GetEnvironmentVariable("PATH", "User")
+            }
+            $gccFound = (Test-Command gcc) -or (Test-Command x86_64-w64-mingw32-gcc)
+        }
+        if ($gccFound) {
+            rustup toolchain install stable-x86_64-pc-windows-gnu 2>&1 | Out-Null
+            Show-Step "Compiling with MinGW toolchain..."
+            $result = cargo +stable-x86_64-pc-windows-gnu build --release --manifest-path (Join-Path $cargoDir "Cargo.toml") 2>&1
+            Write-Host $result
+            if ($?) {
+                $binary = Join-Path $cargoDir "target\x86_64-pc-windows-gnu\release\backup.exe"
+            }
         }
     }
 
-    if (-not (Test-Path $binary)) {
+    # Step 3: Fallback to GitHub release
+    if (-not $binary -or -not (Test-Path $binary)) {
+        Show-Warn "Local build failed. Downloading from GitHub releases..."
+        $releaseUrl = "https://github.com/arvin0494/backup-restore/releases/latest/download/backup.exe"
+        $cachedBin = "$env:TEMP\backup.exe"
+        try {
+            Invoke-WebRequest -Uri $releaseUrl -OutFile $cachedBin -UseBasicParsing -ErrorAction Stop
+            Show-Ok "Downloaded from GitHub releases"
+            $binary = $cachedBin
+        } catch {
+            Show-Fail "Could not download pre-built binary."
+        }
+    }
+
+    if (-not $binary -or -not (Test-Path $binary)) {
         Show-Fail "Binary not found."
     }
 
