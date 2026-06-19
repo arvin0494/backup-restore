@@ -81,23 +81,29 @@ fn wait_for_ftp(host: &str, port: &str, timeout_secs: u64) -> bool {
 // ── RCLONE COPY VIA FTP ──────────────────────────────────
 // Uses rclone's FTP backend to copy files incrementally.
 // Only transfers new/changed files — identical files are skipped.
-fn ftp_copy(src: &str, dst: &str, host: &str, port: &str, user: &str, pass: &str) -> anyhow::Result<()> {
+fn ftp_copy(src: &str, dst: &str, host: &str, port: &str, user: &str, pass: &str, excludes: &[&str]) -> anyhow::Result<()> {
     let _ = std::fs::create_dir_all(dst);
 
     let obs_pass = run_stdout(&format!("rclone obscure '{}'", pass));
     let obs_pass = obs_pass.trim().to_string();
 
+    let mut args: Vec<String> = vec![
+        "copy".into(),
+        format!(":ftp:{}", src),
+        dst.into(),
+        "--progress".into(),
+        "--ftp-host".into(), host.into(),
+        "--ftp-port".into(), port.into(),
+        "--ftp-user".into(), user.into(),
+        "--ftp-pass".into(), obs_pass,
+    ];
+    for ex in excludes {
+        args.push("--exclude".into());
+        args.push(ex.to_string());
+    }
+
     let status = Command::new("rclone")
-        .args(&[
-            "copy",
-            &format!(":ftp:{}", src),
-            dst,
-            "--progress",
-            "--ftp-host", host,
-            "--ftp-port", port,
-            "--ftp-user", user,
-            "--ftp-pass", &obs_pass,
-        ])
+        .args(&args)
         .stdout(std::process::Stdio::inherit())
         .stderr(std::process::Stdio::inherit())
         .status()?;
@@ -196,9 +202,21 @@ pub fn backup_android() -> anyhow::Result<()> {
         let src = format!("/device/{}", dir);
         let dst = format!("{}/{}", phone_dir, dir);
         e(&format!("  {}{}{} → ...", W, dir, N));
-        if let Err(err) = ftp_copy(&src, &dst, &ftp_host, &ftp_port, &ftp_user, &ftp_pass) {
+        if let Err(err) = ftp_copy(&src, &dst, &ftp_host, &ftp_port, &ftp_user, &ftp_pass, &[]) {
             e(&format!("  {} {} copy failed: {}{}", R, dir, err, N));
         }
+    }
+
+    e("Backing up Mihon (comics/manga)...");
+    let mihon_src = "/device/Mihon";
+    let mihon_dst = crate::config::mihon_path();
+    e(&format!("  {}Mihon{} → {} ...", W, N, mihon_dst));
+    let _ = std::fs::create_dir_all(&mihon_dst);
+    if let Err(err) = ftp_copy(mihon_src, &mihon_dst, &ftp_host, &ftp_port, &ftp_user, &ftp_pass, &["*.cbz"]) {
+        e(&format!("  {} Mihon backup failed: {}{}", R, err, N));
+    } else {
+        let (mf, mb) = dir_stats(Path::new(&mihon_dst));
+        e(&format!("  {}Mihon: {} files (excl. .cbz), {}{}", C, mf, fmt(mb), N));
     }
 
     let (files, bytes) = dir_stats(Path::new(&phone_dir));

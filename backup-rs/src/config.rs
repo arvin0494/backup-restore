@@ -111,6 +111,10 @@ pub fn android_ftp_pass() -> String {
     let cfg = load_user_config();
     cfg.get("ANDROID_FTP_PASS").cloned().unwrap_or_else(|| "0000".to_string())
 }
+pub fn mihon_path() -> String {
+    let cfg = load_user_config();
+    cfg.get("MIHON_PATH").cloned().unwrap_or_else(|| "/mnt/HDD4T/Mihon".to_string())
+}
 
 fn get_config_path() -> PathBuf {
     let home = crate::HOME.get().cloned().unwrap_or_else(|| {

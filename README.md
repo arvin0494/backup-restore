@@ -96,6 +96,7 @@ ANDROID_FTP_HOST=192.168.44.13
 ANDROID_FTP_PORT=2121
 ANDROID_FTP_USER=ftp
 ANDROID_FTP_PASS=0000
+MIHON_PATH=/mnt/HDD4T/Mihon
 ```
 
 Only the keys you specify need to be included — missing keys fall back to the built-in defaults above.
@@ -103,6 +104,8 @@ Only the keys you specify need to be included — missing keys fall back to the 
 `BACKUP_EXTRA_DIRS` takes a comma-separated list of directories. Each is backed up to `dest/extra/<basename>/` and shown as a separate item in the restore menu.
 
 `ANDROID_FTP_*` configures FTP-based Android backup (required).
+
+`MIHON_PATH` sets where Mihon (comics/manga) backups are stored. `.cbz` files are excluded. Default: `/mnt/HDD4T/Mihon`.
 
 ### Backup
 
