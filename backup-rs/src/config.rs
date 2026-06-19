@@ -113,7 +113,19 @@ pub fn android_ftp_pass() -> String {
 }
 pub fn mihon_path() -> String {
     let cfg = load_user_config();
-    cfg.get("MIHON_PATH").cloned().unwrap_or_else(|| "/mnt/HDD4T/Mihon".to_string())
+    if let Some(base) = cfg.get("MIHON_PATH") {
+        return base.clone();
+    }
+    if crate::util::detect_platform() == "windows" {
+        for drive in &["E:", "F:", "D:", "C:"] {
+            if drive_has_space(drive) {
+                return format!("{}\\Mihon", drive);
+            }
+        }
+        "C:\\Mihon".to_string()
+    } else {
+        "/mnt/HDD4T/Mihon".to_string()
+    }
 }
 
 fn get_config_path() -> PathBuf {
