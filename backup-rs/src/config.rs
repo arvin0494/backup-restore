@@ -138,34 +138,58 @@ fn get_config_path() -> PathBuf {
 pub fn edit_config() {
     let path = get_config_path();
 
-    if !path.exists() {
-        if let Some(parent) = path.parent() {
-            let _ = std::fs::create_dir_all(parent);
-        }
-        let template = r#"# ── CONFIG for backup-restore ──────────────────────
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+
+    let template = r#"# ── CONFIG for backup-restore ──────────────────────
 # Uncomment and set any values you want to override.
 # Lines starting with # are ignored.
 
-# If not set: defaults to /mnt/HDD4T/BACKUP (Linux) or D:\BACKUP (Windows)
+# ── Backup destination ──
+# Default: /mnt/HDD4T/BACKUP (Linux) or D:\BACKUP (Windows)
 # BACKUP_BASE=/mnt/HDD4T/BACKUP
 
-# Extra directories to back up (comma-separated, relative to ~/).
-# If not set: no extra dirs are backed up.
-# BACKUP_EXTRA_DIRS=Projects,Documents
+# ── Extra directories to back up (comma-separated, relative to ~/) ──
+# Default: empty (no extra dirs)
+# BACKUP_EXTRA_DIRS=
 
-# Android FTP backup — IP of phone running CX File Explorer FTP.
-# If not set: media/Mihon backup is skipped (SMS/contacts still back up).
-# ANDROID_FTP_HOST=192.168.44.13
+# ── Android FTP backup (IP of phone running CX File Explorer) ──
+# Default: skipped (SMS/contacts still back up)
+# ANDROID_FTP_HOST=
+# Default: 2121
 # ANDROID_FTP_PORT=2121
+# Default: ftp
 # ANDROID_FTP_USER=ftp
+# Default: 0000
 # ANDROID_FTP_PASS=0000
 
-# Where to back up Mihon manga.
-# If not set: defaults to /mnt/HDD4T/Mihon (Linux) or D:\Mihon (Windows).
+# ── Mihon manga backup path ──
+# Default: /mnt/HDD4T/Mihon (Linux) or D:\Mihon (Windows)
 # MIHON_PATH=/mnt/HDD4T/Mihon
 "#;
-        let _ = std::fs::write(&path, template);
+
+    // Preserve any active (uncommented) lines from existing config
+    let mut active = Vec::new();
+    if let Ok(content) = std::fs::read_to_string(&path) {
+        for line in content.lines() {
+            let trimmed = line.trim();
+            if !trimmed.is_empty() && !trimmed.starts_with('#') && trimmed.contains('=') {
+                active.push(trimmed.to_string());
+            }
+        }
     }
+
+    let mut output = template.to_string();
+    if !active.is_empty() {
+        output.push_str("\n# ── Active user overrides ──\n");
+        for line in active {
+            output.push_str(&line);
+            output.push('\n');
+        }
+    }
+
+    let _ = std::fs::write(&path, &output);
 
     let editor = std::env::var("EDITOR")
         .or_else(|_| std::env::var("VISUAL"))
