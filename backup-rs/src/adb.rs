@@ -175,55 +175,52 @@ pub fn backup_android() -> anyhow::Result<()> {
     e(&format!("Device: {}{}{}", C, serial, N));
     e(&format!("Dest:   {}{}{}", W, phone_dir, N));
 
-    let ftp_host = crate::config::android_ftp_host()
-        .unwrap_or_else(|| {
-            e(&format!("{}ANDROID_FTP_HOST not set in config{}", Y, N));
-            std::process::exit(1);
-        });
-    let ftp_port = crate::config::android_ftp_port();
-    let ftp_user = crate::config::android_ftp_user();
-    let ftp_pass = crate::config::android_ftp_pass();
+    let ftp_host = crate::config::android_ftp_host();
+    if let Some(ref host) = ftp_host {
+        let ftp_port = crate::config::android_ftp_port();
+        let ftp_user = crate::config::android_ftp_user();
+        let ftp_pass = crate::config::android_ftp_pass();
 
-    e("Starting FTP server on phone...");
-    ftp_start();
-    if wait_for_ftp(&ftp_host, &ftp_port, 10) {
-        e(&format!("  {}FTP connected {}:{} {}", G, ftp_host, ftp_port, N));
-    } else {
-        e(&format!("  {}Could not reach FTP server at {}:{}{}", Y, ftp_host, ftp_port, N));
-        e("  Start the FTP server manually in CX File Explorer (Network → FTP)");
-        e("  Waiting longer...");
-        if !wait_for_ftp(&ftp_host, &ftp_port, 60) {
-            return Err(anyhow::anyhow!("FTP server not reachable"));
+        e("Starting FTP server on phone...");
+        ftp_start();
+        if wait_for_ftp(host, &ftp_port, 10) {
+            e(&format!("  {}FTP connected {}:{} {}", G, host, ftp_port, N));
+        } else {
+            e(&format!("  {}Could not reach FTP server at {}:{}{}", Y, host, ftp_port, N));
+            e("  Start the FTP server manually in CX File Explorer (Network → FTP)");
+            e("  Waiting longer...");
+            if !wait_for_ftp(host, &ftp_port, 60) {
+                return Err(anyhow::anyhow!("FTP server not reachable"));
+            }
         }
-    }
 
-    e("Copying media via FTP (rclone)...");
-    for dir in &["DCIM", "Download", "Pictures", "Movies", "Music", "MIUI"] {
-        let src = format!("/device/{}", dir);
-        let dst = format!("{}/{}", phone_dir, dir);
-        e(&format!("  {}{}{} → ...", W, dir, N));
-        if let Err(err) = ftp_copy(&src, &dst, &ftp_host, &ftp_port, &ftp_user, &ftp_pass, &[]) {
-            e(&format!("  {} {} copy failed: {}{}", R, dir, err, N));
+        e("Copying media via FTP (rclone)...");
+        for dir in &["DCIM", "Download", "Pictures", "Movies", "Music", "MIUI"] {
+            let src = format!("/device/{}", dir);
+            let dst = format!("{}/{}", phone_dir, dir);
+            e(&format!("  {}{}{} → ...", W, dir, N));
+            if let Err(err) = ftp_copy(&src, &dst, host, &ftp_port, &ftp_user, &ftp_pass, &[]) {
+                e(&format!("  {} {} copy failed: {}{}", R, dir, err, N));
+            }
         }
-    }
 
-    e("Backing up Mihon (comics/manga)...");
-    let mihon_src = "/device/Mihon";
-    let mihon_dst = crate::config::mihon_path();
-    e(&format!("  {}Mihon{} → {} ...", W, N, mihon_dst));
-    let _ = std::fs::create_dir_all(&mihon_dst);
-    if let Err(err) = ftp_copy(mihon_src, &mihon_dst, &ftp_host, &ftp_port, &ftp_user, &ftp_pass, &["*.cbz"]) {
-        e(&format!("  {} Mihon backup failed: {}{}", R, err, N));
+        e("Backing up Mihon (comics/manga)...");
+        let mihon_src = "/device/Mihon";
+        let mihon_dst = crate::config::mihon_path();
+        e(&format!("  {}Mihon{} → {} ...", W, N, mihon_dst));
+        let _ = std::fs::create_dir_all(&mihon_dst);
+        if let Err(err) = ftp_copy(mihon_src, &mihon_dst, host, &ftp_port, &ftp_user, &ftp_pass, &["*.cbz"]) {
+            e(&format!("  {} Mihon backup failed: {}{}", R, err, N));
+        } else {
+            let (mf, mb) = dir_stats(Path::new(&mihon_dst));
+            e(&format!("  {}Mihon: {} files (excl. .cbz), {}{}", C, mf, fmt(mb), N));
+        }
+
+        ftp_stop();
     } else {
-        let (mf, mb) = dir_stats(Path::new(&mihon_dst));
-        e(&format!("  {}Mihon: {} files (excl. .cbz), {}{}", C, mf, fmt(mb), N));
+        e(&format!("{}ANDROID_FTP_HOST not set — skipping media/Mihon backup{}", Y, N));
+        e("  Set it in ~/.config/backup-restore/config to enable FTP backups");
     }
-
-    let (files, bytes) = dir_stats(Path::new(&phone_dir));
-    let total_fmt = fmt(bytes);
-    e(&format!("  {}Backup: {} files, {}{}", C, files, total_fmt, N));
-
-    ftp_stop();
 
     e("Saving SMS...");
     let sms_path = format!("{}/sms.json", phone_dir);
