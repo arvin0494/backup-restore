@@ -135,6 +135,65 @@ fn get_config_path() -> PathBuf {
     PathBuf::from(home).join(".config").join("backup-restore").join("config")
 }
 
+pub fn edit_config() {
+    let path = get_config_path();
+
+    if !path.exists() {
+        if let Some(parent) = path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        let template = r#"# ── CONFIG for backup-restore ──────────────────────
+# Uncomment and set any values you want to override.
+# Lines starting with # are ignored.
+
+# If not set: defaults to /mnt/HDD4T/BACKUP (Linux) or D:\BACKUP (Windows)
+# BACKUP_BASE=/mnt/HDD4T/BACKUP
+
+# Extra directories to back up (comma-separated, relative to ~/).
+# If not set: no extra dirs are backed up.
+# BACKUP_EXTRA_DIRS=Projects,Documents
+
+# Android FTP backup — IP of phone running CX File Explorer FTP.
+# If not set: media/Mihon backup is skipped (SMS/contacts still back up).
+# ANDROID_FTP_HOST=192.168.44.13
+# ANDROID_FTP_PORT=2121
+# ANDROID_FTP_USER=ftp
+# ANDROID_FTP_PASS=0000
+
+# Where to back up Mihon manga.
+# If not set: defaults to /mnt/HDD4T/Mihon (Linux) or D:\Mihon (Windows).
+# MIHON_PATH=/mnt/HDD4T/Mihon
+"#;
+        let _ = std::fs::write(&path, template);
+    }
+
+    let editor = std::env::var("EDITOR")
+        .or_else(|_| std::env::var("VISUAL"))
+        .unwrap_or_else(|_| {
+            for cmd in &["nvim", "vim", "nano"] {
+                if std::process::Command::new("which")
+                    .arg(cmd)
+                    .stdout(std::process::Stdio::null())
+                    .status()
+                    .map(|s| s.success())
+                    .unwrap_or(false)
+                {
+                    return cmd.to_string();
+                }
+            }
+            "nano".to_string()
+        });
+
+    let status = std::process::Command::new(&editor)
+        .arg(&path)
+        .status()
+        .expect("failed to launch editor");
+
+    if !status.success() {
+        crate::util::e(&format!("Editor exited with error: {}", status));
+    }
+}
+
 // ── BROWSER PROFILES ───────────────────────────────────────
 // Linux: stores browser data in ~/.config/ or ~/.mozilla
 pub const BROWSERS_LINUX: &[(&str, &str)] = &[

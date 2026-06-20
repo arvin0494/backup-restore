@@ -56,10 +56,19 @@ fn main() -> anyhow::Result<()> {
 
         #[arg(long = "device")]
         device: Option<String>,           // "--device android"
+
+        #[arg(long = "config")]
+        config: bool,                     // "--config" to edit config
     }
 
     // Read what the user typed on the command line
     let cli = Cli::parse();
+
+    // Edit config and exit
+    if cli.config {
+        config::edit_config();
+        return Ok(());
+    }
 
     // Make sure rclone, gdu, and fzf are installed
     util::install_deps();
