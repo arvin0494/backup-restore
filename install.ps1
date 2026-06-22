@@ -31,7 +31,7 @@ $BIN_PATH   = "$BIN_DIR\$BIN_NAME"
 $SCRIPT_DIR = Split-Path -Parent $MyInvocation.MyCommand.Path
 $DEPS_DIR   = Join-Path $SCRIPT_DIR "deps"
 $RUSTUP_EXE = Join-Path $DEPS_DIR "rustup-init.exe"
-$RCLONE_ZIP = Join-Path $DEPS_DIR "rclone-v1.71.0-windows-amd64.zip"
+$RCLONE_ZIP = Join-Path $DEPS_DIR "rclone-v1.74.3-windows-amd64.zip"
 $FZF_ZIP    = Join-Path $DEPS_DIR "fzf-0.73.1-windows_amd64.zip"
 $CHOCO_INSTALLER = Join-Path $DEPS_DIR "choco-install.ps1"
 $ZA_EXE     = Join-Path $DEPS_DIR "7za.exe"
@@ -179,7 +179,7 @@ function Ensure-Rclone {
     if (-not (Test-Path $RCLONE_ZIP)) {
         Show-Warn "Bundled rclone not found in deps/. Downloading..."
         $RCLONE_ZIP = "$env:TEMP\rclone.zip"
-        Invoke-WebRequest -Uri "https://github.com/rclone/rclone/releases/download/v1.71.0/rclone-v1.71.0-windows-amd64.zip" -OutFile $RCLONE_ZIP -UseBasicParsing
+        Invoke-WebRequest -Uri "https://github.com/rclone/rclone/releases/download/v1.74.3/rclone-v1.74.3-windows-amd64.zip" -OutFile $RCLONE_ZIP -UseBasicParsing
     }
 
     $rcloneDir = "$env:TEMP\rclone-install"

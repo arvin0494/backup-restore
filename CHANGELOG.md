@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.4.0 — 2026-06-22
+
+- **Rclone updated** to v1.74.3 (was v1.71.0)
+
 ## v1.3.0 — 2026-06-16
 
 - **Bundled Windows deps**: Chocolatey installer & 7za in `deps/` — offline choco setup
