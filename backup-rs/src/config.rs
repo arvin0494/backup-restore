@@ -111,6 +111,16 @@ pub fn android_ftp_pass() -> String {
     let cfg = load_user_config();
     cfg.get("ANDROID_FTP_PASS").cloned().unwrap_or_else(|| "0000".to_string())
 }
+// ── CUSTOM EXCLUDES ────────────────────────────────────────
+// User-defined exclude patterns added on top of the built-in ones.
+// Comma-separated list of rsync-style patterns.
+pub fn backup_excludes() -> Vec<String> {
+    let cfg = load_user_config();
+    cfg.get("BACKUP_EXCLUDES")
+        .map(|s| s.split(',').map(|p| p.trim().to_string()).filter(|p| !p.is_empty()).collect())
+        .unwrap_or_default()
+}
+
 pub fn mihon_path() -> String {
     let cfg = load_user_config();
     if let Some(base) = cfg.get("MIHON_PATH") {
@@ -167,6 +177,11 @@ pub fn edit_config() {
 # ── Mihon manga backup path ──
 # Default: /mnt/HDD4T/Mihon (Linux) or D:\Mihon (Windows)
 # MIHON_PATH=/mnt/HDD4T/Mihon
+
+# ── Custom exclude patterns (rsync-style, comma-separated) ──
+# Additional patterns to exclude beyond the built-in ones.
+# Default: none
+# BACKUP_EXCLUDES=*.tmp,temp/,cache/
 "#;
 
     // Preserve any active (uncommented) lines from existing config

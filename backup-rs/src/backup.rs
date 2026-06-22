@@ -269,14 +269,19 @@ pub fn backup_home(dest: &str, ck: u32) -> anyhow::Result<()> {
     e("Backing up home data");
     let home_dest = format!("{}/home", dest);
     
-    let mut extra_args: Vec<&str> = Vec::new();
+    let mut extra_args_raw: Vec<String> = Vec::new();
     if detect_platform() == "linux" {
-        extra_args.push("--links");
+        extra_args_raw.push("--links".to_string());
     }
     for &x in HOME_EXCLUDES.iter() {
-        extra_args.push("--exclude");
-        extra_args.push(x);
+        extra_args_raw.push("--exclude".to_string());
+        extra_args_raw.push(x.to_string());
     }
+    for x in config::backup_excludes() {
+        extra_args_raw.push("--exclude".to_string());
+        extra_args_raw.push(x);
+    }
+    let extra_args: Vec<&str> = extra_args_raw.iter().map(|s| s.as_str()).collect();
     e(&format!("  {}~{} → ...", W, N));
     let use_sudo = detect_platform() == "linux";
     copy_progress(&format!("{}/", crate::HOME.get().unwrap()), &home_dest, ck, use_sudo, &extra_args)?;
