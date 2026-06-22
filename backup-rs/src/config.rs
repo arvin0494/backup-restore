@@ -316,7 +316,7 @@ pub const GDU_IGNORE_DIRS: &[&str] = &[
 // Which folders inside ~/ to scan for size estimation.
 pub const GDU_SCAN_DIRS: &[&str] = &[
     "Documents", "Pictures", "Music", "Videos", "Downloads", "Desktop",
-    "Projects", "Templates", "Public", "Games",
+    "Projects", "Templates", "Public",
     ".local", ".fonts", ".themes", ".icons",
 ];
 
