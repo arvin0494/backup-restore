@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.4.1 — 2026-10-09
+
+- **Android backup works on Windows**: `adb` was looked up with `which`, which doesn't exist on Windows, so `--device android` always reported "no device connected". Now uses `where` on Windows
+- **No crash on hostname FTP host**: setting `ANDROID_FTP_HOST` to a name instead of an IP panicked instead of reporting the bad value
+- **Failed transfers no longer report success**: if every media directory failed to copy, the run still printed "Android backup complete!". Failures are now listed and the run exits non-zero (metadata is still saved)
+- **FTP passwords containing quotes**: a password with `'` broke shell quoting around `rclone obscure`, producing the wrong obscured password and a silent auth failure
+
 ## v1.4.0 — 2026-06-22
 
 - **Rclone updated** to v1.74.3 (was v1.71.0)
