@@ -1,5 +1,5 @@
 use crate::util::*;
-use std::net::TcpStream;
+use std::net::{SocketAddr, TcpStream};
 use std::path::Path;
 use std::process::Command;
 use std::time::Duration;
@@ -16,7 +16,12 @@ fn adb(args: &[&str]) -> anyhow::Result<String> {
 }
 
 pub fn available() -> bool {
-    run_ok("which adb") && adb(&["get-state"]).is_ok()
+    // Windows has no `which` — probe with the platform's lookup command.
+    let probe = match crate::util::detect_platform() {
+        "windows" => "where adb",
+        _ => "which adb",
+    };
+    run_ok(probe) && adb(&["get-state"]).is_ok()
 }
 
 pub fn devices() -> Vec<String> {
@@ -66,16 +71,23 @@ fn ftp_stop() {
     }
 }
 
-fn wait_for_ftp(host: &str, port: &str, timeout_secs: u64) -> bool {
-    let addr = format!("{}:{}", host, port);
+// Returns Ok(true) once the port accepts a connection, Ok(false) on timeout,
+// and Err if host:port isn't a valid socket address (e.g. a hostname).
+fn wait_for_ftp(host: &str, port: &str, timeout_secs: u64) -> anyhow::Result<bool> {
+    let addr: SocketAddr = format!("{}:{}", host, port).parse().map_err(|_| {
+        anyhow::anyhow!(
+            "Invalid ANDROID_FTP_HOST={} — expected an IP address (e.g. 192.168.1.10)",
+            host
+        )
+    })?;
     let deadline = std::time::Instant::now() + Duration::from_secs(timeout_secs);
     while std::time::Instant::now() < deadline {
-        if TcpStream::connect_timeout(&addr.parse().unwrap(), Duration::from_secs(2)).is_ok() {
-            return true;
+        if TcpStream::connect_timeout(&addr, Duration::from_secs(2)).is_ok() {
+            return Ok(true);
         }
         std::thread::sleep(Duration::from_secs(1));
     }
-    false
+    Ok(false)
 }
 
 // ── RCLONE COPY VIA FTP ──────────────────────────────────
@@ -84,8 +96,17 @@ fn wait_for_ftp(host: &str, port: &str, timeout_secs: u64) -> bool {
 fn ftp_copy(src: &str, dst: &str, host: &str, port: &str, user: &str, pass: &str, excludes: &[&str]) -> anyhow::Result<()> {
     let _ = std::fs::create_dir_all(dst);
 
-    let obs_pass = run_stdout(&format!("rclone obscure '{}'", pass));
-    let obs_pass = obs_pass.trim().to_string();
+    // Invoke rclone directly instead of via a shell, so passwords containing
+    // quotes or other shell metacharacters are passed through literally.
+    let out = Command::new("rclone")
+        .arg("obscure")
+        .arg(pass)
+        .output()
+        .map_err(|e| anyhow::anyhow!("failed to run `rclone obscure`: {}", e))?;
+    let obs_pass = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    if obs_pass.is_empty() {
+        return Err(anyhow::anyhow!("`rclone obscure` produced no output"));
+    }
 
     let mut args: Vec<String> = vec![
         "copy".into(),
@@ -175,6 +196,7 @@ pub fn backup_android() -> anyhow::Result<()> {
     e(&format!("Device: {}{}{}", C, serial, N));
     e(&format!("Dest:   {}{}{}", W, phone_dir, N));
 
+    let mut ftp_failures: Vec<String> = Vec::new();
     let ftp_host = crate::config::android_ftp_host();
     if let Some(ref host) = ftp_host {
         let ftp_port = crate::config::android_ftp_port();
@@ -183,13 +205,13 @@ pub fn backup_android() -> anyhow::Result<()> {
 
         e("Starting FTP server on phone...");
         ftp_start();
-        if wait_for_ftp(host, &ftp_port, 10) {
+        if wait_for_ftp(host, &ftp_port, 10)? {
             e(&format!("  {}FTP connected {}:{} {}", G, host, ftp_port, N));
         } else {
             e(&format!("  {}Could not reach FTP server at {}:{}{}", Y, host, ftp_port, N));
             e("  Start the FTP server manually in CX File Explorer (Network → FTP)");
             e("  Waiting longer...");
-            if !wait_for_ftp(host, &ftp_port, 60) {
+            if !wait_for_ftp(host, &ftp_port, 60)? {
                 return Err(anyhow::anyhow!("FTP server not reachable"));
             }
         }
@@ -201,6 +223,7 @@ pub fn backup_android() -> anyhow::Result<()> {
             e(&format!("  {}{}{} → ...", W, dir, N));
             if let Err(err) = ftp_copy(&src, &dst, host, &ftp_port, &ftp_user, &ftp_pass, &[]) {
                 e(&format!("  {} {} copy failed: {}{}", R, dir, err, N));
+                ftp_failures.push((*dir).to_string());
             }
         }
 
@@ -255,9 +278,20 @@ pub fn backup_android() -> anyhow::Result<()> {
         let _ = std::fs::write(&format!("{}/device.prop", phone_dir), &out);
     }
 
-    e(&format!("{}{}Android backup complete!{}", BOLD, G, N));
-    e(&format!("Location: {}{}{}", W, phone_dir, N));
+    e(&format!("  Location: {}{}{}", W, phone_dir, N));
 
+    // Metadata was still captured, so report the partial failure instead of a
+    // clean success — otherwise a fully failed media transfer looks like a
+    // complete backup and is only discovered at restore time.
+    if !ftp_failures.is_empty() {
+        return Err(anyhow::anyhow!(
+            "Android backup incomplete — media transfer failed for: {} (metadata was saved to {})",
+            ftp_failures.join(", "),
+            phone_dir
+        ));
+    }
+
+    e(&format!("{}{}Android backup complete!{}", BOLD, G, N));
     Ok(())
 }
 
